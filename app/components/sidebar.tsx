@@ -13,6 +13,7 @@ import {
   Menu,
   X,
   Search,
+  Shield,
 } from 'lucide-react'
 
 interface MenuItem {
@@ -48,6 +49,17 @@ const menuItems: MenuItem[] = [
       { label: 'Subscription Tiers', href: '/admin/subscriptions/tiers', icon: null },
       { label: 'Billing History', href: '/admin/subscriptions/billing', icon: null },
       { label: 'Upgrade Requests', href: '/admin/subscriptions/requests', icon: null },
+    ],
+  },
+  {
+    label: 'Intel Management',
+    href: '#',
+    icon: <Shield size={18} />,
+    subItems: [
+      { label: 'Sources', href: '/admin/intel/sources', icon: null },
+      { label: 'Signals', href: '/admin/intel/signals', icon: null },
+      { label: 'Tags', href: '/admin/intel/tags', icon: null },
+      { label: 'Ingestion Logs', href: '/admin/intel/logs', icon: null },
     ],
   },
   {
