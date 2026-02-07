@@ -38,14 +38,14 @@ async function createTestUser() {
   try {
     // Check if users table exists
     console.log('📋 Checking database schema...')
-    const { data: tableCheck } = await supabase
+    await supabase
       .from('users')
       .select('id')
       .limit(1)
 
     // Create user via admin API (or fetch if already exists)
     console.log(`\n📝 Creating user: ${email}`)
-    let authUser = await supabase.auth.admin.createUser({
+    const createResult = await supabase.auth.admin.createUser({
       email,
       password,
       email_confirm: true, // Auto-confirm email for testing
@@ -54,9 +54,11 @@ async function createTestUser() {
       },
     })
 
-    if (authUser.error) {
+    let userId: string | undefined
+
+    if (createResult.error) {
       // If user already exists, fetch the user
-      if (authUser.error.message.includes('already been registered')) {
+      if (createResult.error.message.includes('already been registered')) {
         console.log('ℹ️  User already exists, fetching user...')
         const { data: users } = await supabase.auth.admin.listUsers()
         const existingUser = users?.users?.find(u => u.email === email)
@@ -66,31 +68,31 @@ async function createTestUser() {
           process.exit(1)
         }
 
-        authUser.data.user = existingUser
+        userId = existingUser.id
         console.log(`✅ Auth user found`)
         console.log(`   ID: ${existingUser.id}`)
         console.log(`   Email: ${existingUser.email}`)
       } else {
-        console.error('❌ Error creating auth user:', authUser.error.message)
+        console.error('❌ Error creating auth user:', createResult.error.message)
         process.exit(1)
       }
     } else {
-      if (!authUser.data.user) {
+      if (!createResult.data.user) {
         console.error('❌ Error: No user returned from creation')
         process.exit(1)
       }
 
+      userId = createResult.data.user.id
       console.log(`✅ Auth user created`)
-      console.log(`   ID: ${authUser.data.user.id}`)
-      console.log(`   Email: ${authUser.data.user.email}`)
+      console.log(`   ID: ${createResult.data.user.id}`)
+      console.log(`   Email: ${createResult.data.user.email}`)
     }
-
-    // Get user ID
-    const userId = authUser.data?.user?.id || authUser.data?.user?.id
     if (!userId) {
       console.error('❌ Error: Could not get user ID')
       process.exit(1)
     }
+
+    // userId is now guaranteed to be defined
 
     // Create extended user profile
     console.log(`\n📋 Creating user profile...`)

@@ -1,5 +1,3 @@
-'use client'
-
 import { Users, CreditCard, Lock, AlertCircle, TrendingUp, TrendingDown } from 'lucide-react'
 
 interface StatCard {
@@ -10,37 +8,63 @@ interface StatCard {
   trendDirection?: 'up' | 'down'
 }
 
-export default function Home() {
-  const stats: StatCard[] = [
-    {
-      label: 'Total Users',
-      value: '1,234',
-      icon: <Users size={20} />,
-      trend: '+12%',
-      trendDirection: 'up',
-    },
-    {
-      label: 'Active Subscriptions',
-      value: '856',
-      icon: <CreditCard size={20} />,
-      trend: '+8%',
-      trendDirection: 'up',
-    },
-    {
-      label: 'Pending Verifications',
-      value: '42',
-      icon: <AlertCircle size={20} />,
-      trend: '-3%',
-      trendDirection: 'down',
-    },
-    {
-      label: 'Access Policies',
-      value: '12',
-      icon: <Lock size={20} />,
-      trend: '+1',
-      trendDirection: 'up',
-    },
-  ]
+interface User {
+  email: string
+  status: 'active' | 'pending'
+  date: string
+}
+
+interface Service {
+  label: string
+  status: 'online' | 'offline'
+}
+
+const getStatCards = (): StatCard[] => [
+  {
+    label: 'Total Users',
+    value: '1,234',
+    icon: <Users size={20} />,
+    trend: '+12%',
+    trendDirection: 'up',
+  },
+  {
+    label: 'Active Subscriptions',
+    value: '856',
+    icon: <CreditCard size={20} />,
+    trend: '+8%',
+    trendDirection: 'up',
+  },
+  {
+    label: 'Pending Verifications',
+    value: '42',
+    icon: <AlertCircle size={20} />,
+    trend: '-3%',
+    trendDirection: 'down',
+  },
+  {
+    label: 'Access Policies',
+    value: '12',
+    icon: <Lock size={20} />,
+    trend: '+1',
+    trendDirection: 'up',
+  },
+]
+
+const RECENT_USERS: User[] = [
+  { email: 'user@example.com', status: 'active', date: '2 hours ago' },
+  { email: 'admin@securelab.org', status: 'active', date: '1 day ago' },
+  { email: 'dev@securelab.org', status: 'pending', date: '3 days ago' },
+]
+
+const SERVICES: Service[] = [
+  { label: 'Database', status: 'online' },
+  { label: 'Auth Service', status: 'online' },
+  { label: 'API Endpoints', status: 'online' },
+  { label: 'Cache', status: 'online' },
+]
+
+export default function AdminPage() {
+  const stats = getStatCards()
 
   return (
     <>
@@ -99,11 +123,7 @@ export default function Home() {
             </div>
           </div>
           <div className="space-y-3">
-            {[
-              { email: 'user@example.com', status: 'active', date: '2 hours ago' },
-              { email: 'admin@securelab.org', status: 'active', date: '1 day ago' },
-              { email: 'dev@securelab.org', status: 'pending', date: '3 days ago' },
-            ].map((user, idx) => (
+            {RECENT_USERS.map((user, idx) => (
               <div
                 key={idx}
                 className="flex items-center justify-between p-4 bg-slate-900/40 rounded-lg border border-slate-800/50 hover:border-slate-700/50 transition-all duration-150"
@@ -138,12 +158,7 @@ export default function Home() {
             <p className="text-xs text-slate-500 mt-1">Service health</p>
           </div>
           <div className="space-y-3 mt-6">
-            {[
-              { label: 'Database', status: 'online' },
-              { label: 'Auth Service', status: 'online' },
-              { label: 'API Endpoints', status: 'online' },
-              { label: 'Cache', status: 'online' },
-            ].map((service, idx) => (
+            {SERVICES.map((service, idx) => (
               <div key={idx} className="flex items-center justify-between p-3 rounded-lg bg-slate-900/40 border border-slate-800/50">
                 <span className="text-sm text-slate-400">{service.label}</span>
                 <div className="flex items-center gap-2">
