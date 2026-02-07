@@ -51,14 +51,28 @@ export default function UsersPage() {
         .from('subscriptions')
         .select('user_id, id, status, tier:subscription_tiers(id, name, display_name)')
 
-      const userMap = new Map(subscriptions?.map(s => [s.user_id, s]) || [])
+      const userMap = new Map((subscriptions as any[])?.map((s: any) => {
+        const tier = Array.isArray(s.tier) ? s.tier[0] : s.tier
+        return [s.user_id, { ...s, tier }]
+      }) || [])
 
-      const usersWithSubs = authUsers.map(user => ({
-        id: user.id,
-        email: user.email || 'Unknown',
-        created_at: user.created_at,
-        subscription: userMap.get(user.id),
-      }))
+      const usersWithSubs: UserWithSubscription[] = authUsers.map(user => {
+        const sub = userMap.get(user.id) as any
+        return {
+          id: user.id,
+          email: user.email || 'Unknown',
+          created_at: user.created_at,
+          subscription: sub ? {
+            id: sub.id,
+            status: sub.status,
+            tier: {
+              id: sub.tier.id,
+              name: sub.tier.name,
+              display_name: sub.tier.display_name,
+            },
+          } : undefined,
+        }
+      })
 
       setUsers(usersWithSubs)
     }
