@@ -60,6 +60,7 @@ const menuItems: MenuItem[] = [
       { label: 'Signals', href: '/admin/intel/signals', icon: null },
       { label: 'Tags', href: '/admin/intel/tags', icon: null },
       { label: 'Ingestion Logs', href: '/admin/intel/logs', icon: null },
+      { label: 'Bulk Import', href: '/admin/intel/import', icon: null },
     ],
   },
   {
