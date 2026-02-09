@@ -1,8 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { createClient } from '@supabase/supabase-js'
+import { useState } from 'react'
 import {
   Upload,
   FileText,
@@ -22,226 +20,108 @@ interface PreviewSignal {
   source_url?: string
 }
 
-// Group related state
-interface InputState {
-  jsonInput: string
-  fileError: string
-  skipDuplicates: boolean
-  autoEnrich: boolean
-}
-
-interface ValidationState {
-  errors: string[]
-  isShowing: boolean
-}
-
-interface PreviewState {
-  signals: PreviewSignal[]
-  isShowing: boolean
-}
-
-interface ImportState {
-  isRunning: boolean
-  results: ImportResults | null
-}
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
 export default function ImportPage() {
-  const router = useRouter()
+  const [jsonInput, setJsonInput] = useState('')
+  const [validationErrors, setValidationErrors] = useState<string[]>([])
+  const [previewSignals, setPreviewSignals] = useState<PreviewSignal[]>([])
+  const [showPreview, setShowPreview] = useState(false)
+  const [skipDuplicates, setSkipDuplicates] = useState(true)
+  const [autoEnrich, setAutoEnrich] = useState(true)
+  const [importing, setImporting] = useState(false)
+  const [importResults, setImportResults] = useState<ImportResults | null>(null)
+  const [fileError, setFileError] = useState('')
 
-  // ✅ Authorization state
-  const [isAuthorized, setIsAuthorized] = useState(false)
-  const [authLoading, setAuthLoading] = useState(true)
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
 
-  // ✅ Grouped state - reduces re-renders
-  const [input, setInput] = useState<InputState>({
-    jsonInput: '',
-    fileError: '',
-    skipDuplicates: true,
-    autoEnrich: true,
-  })
-
-  const [validation, setValidation] = useState<ValidationState>({
-    errors: [],
-    isShowing: false,
-  })
-
-  const [preview, setPreview] = useState<PreviewState>({
-    signals: [],
-    isShowing: false,
-  })
-
-  const [import_, setImport] = useState<ImportState>({
-    isRunning: false,
-    results: null,
-  })
-
-  // ✅ Check authorization on mount
-  useEffect(() => {
-    async function checkAuth() {
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-
-        if (!user) {
-          router.push('/login')
-          return
-        }
-
-        // ✅ TODO: Add role verification
-        // Example: Check if user.user_metadata?.role === 'admin'
-        // For now: assumes all authenticated /admin users are admins
-        setIsAuthorized(true)
-      } catch (err) {
-        console.error('Auth check failed:', err)
-        router.push('/login')
-      } finally {
-        setAuthLoading(false)
-      }
+    if (file.size > 5 * 1024 * 1024) {
+      setFileError('File is too large (max 5MB)')
+      return
     }
 
-    checkAuth()
-  }, [router])
-
-  // ✅ Memoized file upload handler
-  const handleFileUpload = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0]
-      if (!file) return
-
-      // ✅ Validate file type
-      if (!file.type || file.type !== 'application/json') {
-        setInput(prev => ({ ...prev, fileError: 'Only JSON files are supported' }))
-        return
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      try {
+        const content = event.target?.result as string
+        setJsonInput(content)
+        setFileError('')
+        setValidationErrors([])
+        setImportResults(null)
+      } catch (err) {
+        setFileError('Failed to read file')
       }
+    }
+    reader.readAsText(file)
+  }
 
-      // ✅ Validate extension
-      if (!file.name.endsWith('.json')) {
-        setInput(prev => ({ ...prev, fileError: 'File must have .json extension' }))
-        return
-      }
-
-      // ✅ Check file size
-      if (file.size > 5 * 1024 * 1024) {
-        setInput(prev => ({ ...prev, fileError: 'File is too large (max 5MB)' }))
-        return
-      }
-
-      const reader = new FileReader()
-      reader.onload = (event) => {
-        try {
-          const content = event.target?.result as string
-          setInput(prev => ({
-            ...prev,
-            jsonInput: content,
-            fileError: '',
-          }))
-          setValidation({ errors: [], isShowing: false })
-          setImport({ isRunning: false, results: null })
-        } catch (err) {
-          setInput(prev => ({ ...prev, fileError: 'Failed to read file' }))
-        }
-      }
-      reader.readAsText(file)
-    },
-    []
-  )
-
-  // ✅ Memoized validation handler
-  const handleValidate = useCallback(() => {
-    if (!input.jsonInput.trim()) {
-      setValidation({ errors: ['No JSON provided'], isShowing: false })
+  const handleValidate = () => {
+    if (!jsonInput.trim()) {
+      setValidationErrors(['No JSON provided'])
       return
     }
 
     try {
-      const jsonData = JSON.parse(input.jsonInput)
-      const validationResult = validateSignalsJson(jsonData)
+      const jsonData = JSON.parse(jsonInput)
+      const validation = validateSignalsJson(jsonData)
 
-      if (!validationResult.valid) {
-        setValidation({ errors: validationResult.errors, isShowing: false })
-        setPreview({ signals: [], isShowing: false })
+      if (!validation.valid) {
+        setValidationErrors(validation.errors)
+        setPreviewSignals([])
+        setShowPreview(false)
       } else {
-        setValidation({ errors: [], isShowing: false })
+        setValidationErrors([])
         const signals = (jsonData.signals || []).map((signal: any) => ({
           title: signal.title,
           severity: signal.severity || 'medium',
           signal_category: signal.signal_category || 'news',
           source_url: signal.source_url,
         }))
-        setPreview({ signals, isShowing: true })
+        setPreviewSignals(signals)
+        setShowPreview(true)
       }
     } catch (err) {
-      setValidation({
-        errors: [
-          'Invalid JSON: ' + (err instanceof Error ? err.message : 'Parse error'),
-        ],
-        isShowing: false,
-      })
-      setPreview({ signals: [], isShowing: false })
+      setValidationErrors([
+        'Invalid JSON: ' + (err instanceof Error ? err.message : 'Parse error'),
+      ])
+      setPreviewSignals([])
+      setShowPreview(false)
     }
-  }, [input.jsonInput])
+  }
 
-  // ✅ Memoized import handler with auth check
-  const handleImport = useCallback(async () => {
-    if (!input.jsonInput.trim()) return
+  const handleImport = async () => {
+    if (!jsonInput.trim()) return
 
-    // ✅ Verify user is still authenticated
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      setImport({
-        isRunning: false,
-        results: {
-          imported: 0,
-          skipped: 0,
-          errors: ['Session expired. Please log in again.'],
-          details: [],
-        },
-      })
-      return
-    }
-
-    setImport(prev => ({ ...prev, isRunning: true }))
+    setImporting(true)
     try {
-      const jsonData = JSON.parse(input.jsonInput)
+      const jsonData = JSON.parse(jsonInput)
       const results = await importSignalsFromJson(jsonData, {
-        skipDuplicates: input.skipDuplicates,
-        autoEnrich: input.autoEnrich,
+        skipDuplicates,
+        autoEnrich,
       })
-      setImport({ isRunning: false, results })
+      setImportResults(results)
     } catch (err) {
-      // ✅ Generic error message to client
-      console.error('Import error:', err); // Detailed logging server-side
-      setImport({
-        isRunning: false,
-        results: {
-          imported: 0,
-          skipped: 0,
-          errors: ['Import failed. Please check your JSON format and try again.'],
-          details: [],
-        },
+      setImportResults({
+        imported: 0,
+        skipped: 0,
+        errors: ['Import failed: ' + (err instanceof Error ? err.message : 'Unknown error')],
+        details: [],
       })
+    } finally {
+      setImporting(false)
     }
-  }, [input])
+  }
 
-  // ✅ Memoized clear handler
-  const handleClear = useCallback(() => {
-    setInput({
-      jsonInput: '',
-      fileError: '',
-      skipDuplicates: true,
-      autoEnrich: true,
-    })
-    setValidation({ errors: [], isShowing: false })
-    setPreview({ signals: [], isShowing: false })
-    setImport({ isRunning: false, results: null })
-  }, [])
+  const handleClear = () => {
+    setJsonInput('')
+    setValidationErrors([])
+    setPreviewSignals([])
+    setShowPreview(false)
+    setImportResults(null)
+    setFileError('')
+  }
 
-  // ✅ Memoized template handler
-  const handleCopyTemplate = useCallback(() => {
+  const handleCopyTemplate = () => {
     const template = {
       metadata: {
         import_source: 'manual',
@@ -259,11 +139,8 @@ export default function ImportPage() {
         },
       ],
     }
-    setInput(prev => ({
-      ...prev,
-      jsonInput: JSON.stringify(template, null, 2),
-    }))
-  }, [])
+    setJsonInput(JSON.stringify(template, null, 2))
+  }
 
   const severityColor = (severity: string) => {
     const colors: Record<string, string> = {
@@ -274,31 +151,6 @@ export default function ImportPage() {
       info: 'text-slate-400',
     }
     return colors[severity] || colors.info
-  }
-
-  // ✅ Auth loading state
-  if (authLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <Loader size={32} className="animate-spin mx-auto mb-4 text-brand-400" />
-          <p className="text-slate-400">Checking authorization...</p>
-        </div>
-      </div>
-    )
-  }
-
-  // ✅ Auth failed state
-  if (!isAuthorized) {
-    return (
-      <div className="bg-red-950/30 border border-red-900/50 rounded-lg p-6">
-        <div className="flex gap-2 text-red-300 font-semibold mb-2">
-          <AlertCircle size={20} />
-          Unauthorized Access
-        </div>
-        <p className="text-red-200">You do not have permission to access this page.</p>
-      </div>
-    )
   }
 
   return (
@@ -316,52 +168,35 @@ export default function ImportPage() {
         <h2 className="text-lg font-semibold text-slate-100">Select JSON File</h2>
 
         <div className="space-y-3">
-          <label htmlFor="json-file" className="text-sm font-medium text-slate-300">
-            File Upload
+          <label className="block">
+            <input
+              type="file"
+              accept=".json"
+              onChange={handleFileUpload}
+              className="block w-full text-sm text-slate-400
+                file:mr-4 file:py-2 file:px-4
+                file:rounded file:border-0
+                file:text-sm file:font-semibold
+                file:bg-brand-600 file:text-white
+                hover:file:bg-brand-700
+                cursor-pointer"
+            />
           </label>
-          <input
-            id="json-file"
-            type="file"
-            accept=".json"
-            onChange={handleFileUpload}
-            aria-label="Upload JSON file with threat signals"
-            aria-describedby="file-help"
-            className="block w-full text-sm text-slate-400
-              file:mr-4 file:py-2 file:px-4
-              file:rounded file:border-0
-              file:text-sm file:font-semibold
-              file:bg-brand-600 file:text-white
-              hover:file:bg-brand-700
-              cursor-pointer"
-          />
-          <p id="file-help" className="text-xs text-slate-500">
-            Maximum file size: 5MB. JSON format only.
-          </p>
 
-          {input.fileError && (
+          {fileError && (
             <div className="flex gap-2 p-3 bg-red-950/30 border border-red-900/50 rounded text-red-300 text-sm">
               <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
-              {input.fileError}
+              {fileError}
             </div>
           )}
 
           <div className="text-sm text-slate-500">or</div>
 
-          <label htmlFor="json-textarea" className="text-sm font-medium text-slate-300">
-            Paste JSON
-          </label>
           <textarea
-            id="json-textarea"
-            value={input.jsonInput}
-            onChange={(e) =>
-              setInput(prev => ({
-                ...prev,
-                jsonInput: e.target.value,
-              }))
-            }
+            value={jsonInput}
+            onChange={(e) => setJsonInput(e.target.value)}
             placeholder="Paste your JSON here..."
             rows={12}
-            aria-label="Paste JSON content for import"
             className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded font-mono text-sm text-slate-100 placeholder-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500/30"
           />
 
@@ -377,14 +212,14 @@ export default function ImportPage() {
       </div>
 
       {/* Validation Errors */}
-      {validation.errors.length > 0 && (
+      {validationErrors.length > 0 && (
         <div className="bg-red-950/30 border border-red-900/50 rounded-lg p-4 space-y-2">
           <div className="flex gap-2 text-red-300 font-semibold">
             <XCircle size={18} />
-            Validation Errors ({validation.errors.length})
+            Validation Errors ({validationErrors.length})
           </div>
           <ul className="space-y-1 ml-6">
-            {validation.errors.map((error, i) => (
+            {validationErrors.map((error, i) => (
               <li key={i} className="text-sm text-red-300 list-disc">
                 {error}
               </li>
@@ -394,11 +229,11 @@ export default function ImportPage() {
       )}
 
       {/* Preview Section */}
-      {preview.isShowing && preview.signals.length > 0 && !import_.results && (
+      {showPreview && previewSignals.length > 0 && !importResults && (
         <div className="bg-slate-800/50 border border-slate-700 rounded-lg overflow-hidden">
           <div className="p-4 bg-slate-900/50 border-b border-slate-700 flex items-center gap-2">
             <FileText size={18} className="text-brand-400" />
-            <span className="font-semibold text-slate-100">Preview: {preview.signals.length} signals</span>
+            <span className="font-semibold text-slate-100">Preview: {previewSignals.length} signals</span>
           </div>
 
           <div className="overflow-x-auto">
@@ -412,7 +247,7 @@ export default function ImportPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700">
-                {preview.signals.slice(0, 10).map((signal, i) => (
+                {previewSignals.slice(0, 10).map((signal, i) => (
                   <tr key={i} className="hover:bg-slate-700/20 transition-colors">
                     <td className="px-4 py-3 text-slate-100 max-w-xs truncate">{signal.title}</td>
                     <td className="px-4 py-3 text-slate-400 text-xs">{signal.signal_category}</td>
@@ -426,16 +261,16 @@ export default function ImportPage() {
             </table>
           </div>
 
-          {preview.signals.length > 10 && (
+          {previewSignals.length > 10 && (
             <div className="px-4 py-3 bg-slate-900/20 border-t border-slate-700 text-sm text-slate-400">
-              ... and {preview.signals.length - 10} more signals
+              ... and {previewSignals.length - 10} more signals
             </div>
           )}
         </div>
       )}
 
       {/* Options Section */}
-      {!import_.results && input.jsonInput.trim() && (
+      {!importResults && jsonInput.trim() && (
         <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-4">
           <h3 className="font-semibold text-slate-100">Import Options</h3>
 
@@ -443,13 +278,8 @@ export default function ImportPage() {
             <label className="flex items-center gap-3 cursor-pointer">
               <input
                 type="checkbox"
-                checked={input.skipDuplicates}
-                onChange={(e) =>
-                  setInput(prev => ({
-                    ...prev,
-                    skipDuplicates: e.target.checked,
-                  }))
-                }
+                checked={skipDuplicates}
+                onChange={(e) => setSkipDuplicates(e.target.checked)}
                 className="w-4 h-4 rounded bg-slate-700 border-slate-600 text-brand-600 focus:ring-brand-500"
               />
               <span className="text-sm text-slate-300">Skip duplicate signals (URL and CVE matching)</span>
@@ -458,13 +288,8 @@ export default function ImportPage() {
             <label className="flex items-center gap-3 cursor-pointer">
               <input
                 type="checkbox"
-                checked={input.autoEnrich}
-                onChange={(e) =>
-                  setInput(prev => ({
-                    ...prev,
-                    autoEnrich: e.target.checked,
-                  }))
-                }
+                checked={autoEnrich}
+                onChange={(e) => setAutoEnrich(e.target.checked)}
                 className="w-4 h-4 rounded bg-slate-700 border-slate-600 text-brand-600 focus:ring-brand-500"
               />
               <span className="text-sm text-slate-300">Auto-enrich signals (infer industries, calculate confidence)</span>
@@ -474,11 +299,11 @@ export default function ImportPage() {
       )}
 
       {/* Action Buttons */}
-      {!import_.results && (
+      {!importResults && (
         <div className="flex gap-3">
-          {input.jsonInput.trim() && !validation.errors.length && (
+          {jsonInput.trim() && !validationErrors.length && (
             <>
-              {!preview.isShowing ? (
+              {!showPreview ? (
                 <button
                   onClick={handleValidate}
                   className="px-4 py-2 bg-brand-600 text-white rounded font-medium hover:bg-brand-700 transition-colors flex items-center gap-2"
@@ -489,10 +314,10 @@ export default function ImportPage() {
               ) : (
                 <button
                   onClick={handleImport}
-                  disabled={import_.isRunning}
+                  disabled={importing}
                   className="px-4 py-2 bg-brand-600 text-white rounded font-medium hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
                 >
-                  {import_.isRunning ? (
+                  {importing ? (
                     <>
                       <Loader size={16} className="animate-spin" />
                       Importing...
@@ -508,7 +333,7 @@ export default function ImportPage() {
             </>
           )}
 
-          {input.jsonInput.trim() && (
+          {jsonInput.trim() && (
             <button
               onClick={handleClear}
               className="px-4 py-2 bg-slate-700 text-slate-100 rounded font-medium hover:bg-slate-600 transition-colors"
@@ -520,7 +345,7 @@ export default function ImportPage() {
       )}
 
       {/* Results Section */}
-      {import_.results && (
+      {importResults && (
         <div className="space-y-4">
           {/* Summary */}
           <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-6">
@@ -530,7 +355,7 @@ export default function ImportPage() {
               <div className="bg-slate-900/30 rounded-lg p-4 border border-slate-700">
                 <div className="text-3xl font-bold text-green-400 flex items-center gap-2">
                   <CheckCircle size={24} />
-                  {import_.results.imported}
+                  {importResults.imported}
                 </div>
                 <div className="text-sm text-slate-400 mt-1">Imported</div>
               </div>
@@ -538,7 +363,7 @@ export default function ImportPage() {
               <div className="bg-slate-900/30 rounded-lg p-4 border border-slate-700">
                 <div className="text-3xl font-bold text-yellow-400 flex items-center gap-2">
                   <AlertCircle size={24} />
-                  {import_.results.skipped}
+                  {importResults.skipped}
                 </div>
                 <div className="text-sm text-slate-400 mt-1">Skipped (Duplicates)</div>
               </div>
@@ -546,7 +371,7 @@ export default function ImportPage() {
               <div className="bg-slate-900/30 rounded-lg p-4 border border-slate-700">
                 <div className="text-3xl font-bold text-red-400 flex items-center gap-2">
                   <XCircle size={24} />
-                  {import_.results.errors.length}
+                  {importResults.errors.length}
                 </div>
                 <div className="text-sm text-slate-400 mt-1">Errors</div>
               </div>
@@ -554,7 +379,7 @@ export default function ImportPage() {
           </div>
 
           {/* Detailed Results */}
-          {import_.results.details.length > 0 && (
+          {importResults.details.length > 0 && (
             <div className="bg-slate-800/50 border border-slate-700 rounded-lg overflow-hidden">
               <div className="p-4 bg-slate-900/50 border-b border-slate-700">
                 <span className="font-semibold text-slate-100">Detailed Results</span>
@@ -570,7 +395,7 @@ export default function ImportPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-700">
-                    {import_.results.details.map((detail, i) => (
+                    {importResults.details.map((detail, i) => (
                       <tr key={i} className="hover:bg-slate-700/20 transition-colors">
                         <td className="px-4 py-3 text-slate-100 max-w-xs truncate">{detail.title}</td>
                         <td className="px-4 py-3">
@@ -599,14 +424,14 @@ export default function ImportPage() {
           )}
 
           {/* Error Summary */}
-          {import_.results.errors.length > 0 && (
+          {importResults.errors.length > 0 && (
             <div className="bg-red-950/30 border border-red-900/50 rounded-lg p-4 space-y-2">
               <div className="flex gap-2 text-red-300 font-semibold">
                 <XCircle size={18} />
-                General Errors ({import_.results.errors.length})
+                General Errors ({importResults.errors.length})
               </div>
               <ul className="space-y-1 ml-6">
-                {import_.results.errors.map((error, i) => (
+                {importResults.errors.map((error, i) => (
                   <li key={i} className="text-sm text-red-300 list-disc">
                     {error}
                   </li>

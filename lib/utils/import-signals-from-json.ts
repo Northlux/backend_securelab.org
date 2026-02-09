@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 
 // Validation schema for signals
@@ -76,6 +76,15 @@ export interface ImportResults {
   details: ImportResult[];
 }
 
+// ✅ Database response schema for type-safe queries
+const DatabaseSignalRowSchema = z.object({
+  source_url: z.string().url().nullable(),
+});
+
+const DatabaseCVERowSchema = z.object({
+  cve_ids: z.array(z.string()).nullable(),
+});
+
 /**
  * Validate JSON against schema without importing
  */
@@ -109,50 +118,72 @@ export function validateSignalsJson(jsonData: unknown): {
 }
 
 /**
- * Fetch existing signal URLs from database
+ * Fetch existing signal URLs from database - Type-safe version
  */
-async function fetchExistingUrls(supabase: any): Promise<Set<string>> {
-  const { data, error } = await (supabase as any)
-    .from('signals')
-    .select('source_url')
-    .not('source_url', 'is', null);
+async function fetchExistingUrls(supabase: SupabaseClient): Promise<Set<string>> {
+  try {
+    const { data, error } = await supabase
+      .from('signals')
+      .select('source_url')
+      .not('source_url', 'is', null);
 
-  if (error) {
-    console.warn('Failed to fetch existing URLs:', error);
+    if (error) {
+      console.warn('Failed to fetch existing URLs:', {
+        error_code: error.code,
+        error_message: error.message,
+      });
+      return new Set();
+    }
+
+    // ✅ Validate response shape with Zod
+    const validated = z.array(DatabaseSignalRowSchema).parse(data || []);
+
+    return new Set(
+      validated
+        .map(row => row.source_url)
+        .filter((url): url is string => url !== null && url !== undefined)
+    );
+  } catch (err) {
+    console.error('Error fetching existing URLs:', err instanceof Error ? err.message : 'Unknown error');
     return new Set();
   }
-
-  return new Set(
-    (data || [])
-      .map((row: any) => row.source_url)
-      .filter((url: any): url is string => url !== null && url !== undefined)
-  );
 }
 
 /**
- * Fetch existing CVE IDs from database
+ * Fetch existing CVE IDs from database - Type-safe version
  */
-async function fetchExistingCveIds(supabase: any): Promise<Map<string, boolean>> {
-  const { data, error } = await (supabase as any)
-    .from('signals')
-    .select('cve_ids')
-    .not('cve_ids', 'is', null);
+async function fetchExistingCveIds(supabase: SupabaseClient): Promise<Map<string, boolean>> {
+  try {
+    const { data, error } = await supabase
+      .from('signals')
+      .select('cve_ids')
+      .not('cve_ids', 'is', null);
 
-  if (error) {
-    console.warn('Failed to fetch existing CVE IDs:', error);
-    return new Map();
-  }
+    if (error) {
+      console.warn('Failed to fetch existing CVE IDs:', {
+        error_code: error.code,
+        error_message: error.message,
+      });
+      return new Map();
+    }
 
-  const cveMap = new Map<string, boolean>();
-  for (const row of data || []) {
-    if (Array.isArray(row.cve_ids)) {
-      for (const cveId of row.cve_ids) {
-        cveMap.set(cveId, true);
+    // ✅ Validate response shape with Zod
+    const validated = z.array(DatabaseCVERowSchema).parse(data || []);
+
+    const cveMap = new Map<string, boolean>();
+    for (const row of validated) {
+      if (Array.isArray(row.cve_ids)) {
+        for (const cveId of row.cve_ids) {
+          cveMap.set(cveId, true);
+        }
       }
     }
-  }
 
-  return cveMap;
+    return cveMap;
+  } catch (err) {
+    console.error('Error fetching existing CVE IDs:', err instanceof Error ? err.message : 'Unknown error');
+    return new Map();
+  }
 }
 
 /**
@@ -236,6 +267,7 @@ function enrichSignal(signal: any): any {
 
 /**
  * Import signals from JSON data
+ * ✅ Added session validation and improved error handling
  */
 export async function importSignalsFromJson(
   jsonData: unknown,
@@ -264,6 +296,27 @@ export async function importSignalsFromJson(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
+
+  // ✅ Verify user session is still valid
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return {
+        imported: 0,
+        skipped: 0,
+        errors: ['Session expired. Please log in and try again.'],
+        details: [],
+      };
+    }
+  } catch (err) {
+    console.error('Session validation failed:', err instanceof Error ? err.message : 'Unknown error');
+    return {
+      imported: 0,
+      skipped: 0,
+      errors: ['Authentication error. Please log in again.'],
+      details: [],
+    };
+  }
 
   const results: ImportResults = {
     imported: 0,
@@ -310,17 +363,25 @@ export async function importSignalsFromJson(
         enrichedSignal = enrichSignal(enrichedSignal);
       }
 
-      // Insert into database
-      const { error } = await (supabase as any)
+      // ✅ Type-safe database insert
+      const { error } = await supabase
         .from('signals')
-        .insert(enrichedSignal);
+        .insert([enrichedSignal]); // Explicit array notation
 
       if (error) {
-        results.errors.push(`${signal.title}: ${error.message}`);
+        // ✅ Log detailed error server-side
+        console.error('Database insert failed:', {
+          signal_title: signal.title,
+          error_code: error.code,
+          error_message: error.message,
+          signal_id: (signal as any).id,
+        });
+
+        // ✅ Return generic error to client
         results.details.push({
           title: signal.title,
           status: 'error',
-          error: error.message,
+          error: 'Failed to import signal. Please check the format and try again.',
         });
       } else {
         results.imported++;
@@ -330,12 +391,19 @@ export async function importSignalsFromJson(
         });
       }
     } catch (err) {
+      // ✅ Log detailed error server-side
       const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-      results.errors.push(`${signal.title}: ${errorMsg}`);
+      console.error('Signal import error:', {
+        signal_title: signal.title,
+        error: errorMsg,
+        error_type: err instanceof Error ? err.constructor.name : 'Unknown',
+      });
+
+      // ✅ Return generic error to client
       results.details.push({
         title: signal.title,
         status: 'error',
-        error: errorMsg,
+        error: 'Import failed due to an error. Please try again.',
       });
     }
   }
