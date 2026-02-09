@@ -152,7 +152,7 @@ export function Sidebar() {
       <aside
         className={`fixed left-0 top-0 h-screen bg-slate-900 border-r border-slate-800/50 transition-all duration-300 ${
           isOpen ? 'w-64' : 'w-20'
-        } lg:relative lg:block hidden`}
+        } ${!isOpen ? 'hidden' : ''} lg:block lg:relative`}
       >
         {/* Branding */}
         <div className="p-6 border-b border-slate-800/50">
