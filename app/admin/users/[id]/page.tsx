@@ -1,11 +1,54 @@
 import { User } from 'lucide-react'
+import { z } from 'zod'
+import { redirect } from 'next/navigation'
 import { getUserById } from '@/app/actions/users'
+import { createServerSupabaseClient } from '@/lib/supabase/server'
 
 export const metadata = {
   title: 'User Detail | Admin',
 }
 
-export default async function UserDetailPage({ params }: { params: { id: string } }) {
+// UUID validation schema
+const UUIDSchema = z.string().uuid('Invalid user ID format')
+
+export default async function UserDetailPage(props: {
+  params: Promise<{ id: string }>
+}) {
+  // Await the params (Next.js 15 requirement)
+  const params = await props.params
+
+  // Validate UUID format
+  const validationResult = UUIDSchema.safeParse(params.id)
+  if (!validationResult.success) {
+    return (
+      <div className="flex items-center justify-center p-12">
+        <p className="text-slate-400">Invalid user ID</p>
+      </div>
+    )
+  }
+
+  // Authenticate user
+  const supabase = await createServerSupabaseClient()
+  const {
+    data: { user: authUser },
+  } = await supabase.auth.getUser()
+
+  if (!authUser) {
+    redirect('/login')
+  }
+
+  // Check authorization (admin role required)
+  const { data: userData } = await supabase
+    .from('users')
+    .select('role')
+    .eq('id', authUser.id)
+    .single()
+
+  if (!userData || userData.role !== 'admin') {
+    redirect('/login')
+  }
+
+  // Fetch the requested user
   const user = await getUserById(params.id)
 
   if (!user) {
