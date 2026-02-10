@@ -3,6 +3,9 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 import DashboardCards from '@/app/components/admin/dashboard-cards'
 import ImportStats from '@/app/components/admin/import-stats'
 import SignalChart from '@/app/components/admin/signal-chart'
+import { SignalTrendChart } from '@/app/components/admin/signal-trend-chart'
+import { SourceRanking } from '@/app/components/admin/source-ranking'
+import { SeverityDistribution } from '@/app/components/admin/severity-distribution'
 
 interface SignalStats {
   totalSignals: number
@@ -163,6 +166,107 @@ async function fetchSignalsByCategory(
   }
 }
 
+async function fetchSignalTrend(
+  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>
+): Promise<Array<{ date: string; count: number }>> {
+  try {
+    const { data, error } = await supabase
+      .from('signals')
+      .select('created_at')
+
+    if (error) {
+      console.error('Failed to fetch signal trend:', error)
+      return []
+    }
+
+    const signals = (data as Array<{ created_at: string }>) || []
+    const dayMap = new Map<string, number>()
+
+    // Last 30 days
+    for (let i = 0; i < 30; i++) {
+      const date = new Date()
+      date.setDate(date.getDate() - i)
+      const dateStr = date.toISOString().split('T')[0]
+      dayMap.set(dateStr, 0)
+    }
+
+    for (const signal of signals) {
+      const dateStr = new Date(signal.created_at).toISOString().split('T')[0]
+      if (dayMap.has(dateStr)) {
+        dayMap.set(dateStr, (dayMap.get(dateStr) || 0) + 1)
+      }
+    }
+
+    return Array.from(dayMap.entries())
+      .map(([date, count]) => ({ date, count }))
+      .reverse()
+  } catch (err) {
+    console.error('Error fetching signal trend:', err)
+    return []
+  }
+}
+
+async function fetchSourceRanking(
+  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>
+): Promise<Array<{ sourceName: string; count: number }>> {
+  try {
+    const { data, error } = await supabase
+      .from('signals')
+      .select('source_id, sources(name)')
+
+    if (error) {
+      console.error('Failed to fetch source ranking:', error)
+      return []
+    }
+
+    const signals = (data as Array<{ source_id: string | null; sources: { name: string } | null }>) || []
+    const sourceMap = new Map<string, number>()
+
+    for (const signal of signals) {
+      const sourceName = signal.sources?.name || 'Unknown'
+      sourceMap.set(sourceName, (sourceMap.get(sourceName) || 0) + 1)
+    }
+
+    return Array.from(sourceMap.entries())
+      .map(([sourceName, count]) => ({ sourceName, count }))
+      .sort((a, b) => b.count - a.count)
+  } catch (err) {
+    console.error('Error fetching source ranking:', err)
+    return []
+  }
+}
+
+async function fetchSeverityDistribution(
+  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>
+): Promise<Array<{ severity: string; count: number }>> {
+  try {
+    const { data, error } = await supabase
+      .from('signals')
+      .select('severity')
+
+    if (error) {
+      console.error('Failed to fetch severity distribution:', error)
+      return []
+    }
+
+    const signals = (data as Array<{ severity: string }>) || []
+    const severityMap = new Map<string, number>()
+
+    for (const signal of signals) {
+      const severity = signal.severity || 'unknown'
+      severityMap.set(severity, (severityMap.get(severity) || 0) + 1)
+    }
+
+    return Array.from(severityMap.entries()).map(([severity, count]) => ({
+      severity,
+      count,
+    }))
+  } catch (err) {
+    console.error('Error fetching severity distribution:', err)
+    return []
+  }
+}
+
 export default async function IntelDashboardPage() {
   const supabase = await createServerSupabaseClient()
 
@@ -178,11 +282,14 @@ export default async function IntelDashboardPage() {
   }
 
   // ✅ Fetch all data in parallel
-  const [signalStats, sourceStats, recentImports, signalsByCategory] = await Promise.all([
+  const [signalStats, sourceStats, recentImports, signalsByCategory, signalTrend, sourceRanking, severityDistribution] = await Promise.all([
     fetchSignalStats(supabase),
     fetchSourceStats(supabase),
     fetchRecentImports(supabase),
     fetchSignalsByCategory(supabase),
+    fetchSignalTrend(supabase),
+    fetchSourceRanking(supabase),
+    fetchSeverityDistribution(supabase),
   ])
 
   return (
@@ -196,14 +303,28 @@ export default async function IntelDashboardPage() {
       {/* Stats Cards */}
       <DashboardCards stats={signalStats} sources={sourceStats} />
 
-      {/* Charts and Analytics Row */}
+      {/* Charts and Analytics Rows */}
+
+      {/* Trend and Distribution */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Imports */}
-        <ImportStats imports={recentImports} />
+        {/* Signal Trend */}
+        <SignalTrendChart data={signalTrend} />
+
+        {/* Severity Distribution */}
+        <SeverityDistribution data={severityDistribution} />
+      </div>
+
+      {/* Sources and Categories */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Source Ranking */}
+        <SourceRanking data={sourceRanking} />
 
         {/* Signal Distribution Chart */}
         <SignalChart data={signalsByCategory} />
       </div>
+
+      {/* Recent Imports */}
+      <ImportStats imports={recentImports} />
 
       {/* Quick Actions */}
       <div className="border border-slate-800 rounded-lg p-6 bg-slate-800/50">

@@ -7,6 +7,12 @@ import {
   deleteSignal,
   updateSignalSeverity,
 } from '@/app/actions/intel/signals'
+import {
+  bulkDeleteSignals,
+  bulkUpdateSeverity,
+  bulkMarkAsVerified,
+} from '@/app/actions/intel/bulk-operations'
+import { BulkOperationsToolbar } from '@/app/components/admin/bulk-operations-toolbar'
 
 interface Signal {
   id: string
@@ -36,6 +42,8 @@ export default function SignalsClient({ initialSignals, initialCount }: SignalsC
   })
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editSeverity, setEditSeverity] = useState<string>('')
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkSeverity, setBulkSeverity] = useState<string>('medium')
 
   const pageSize = 20
 
@@ -92,6 +100,76 @@ export default function SignalsClient({ initialSignals, initialCount }: SignalsC
       setEditingId(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update severity')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const toggleSelection = (id: string) => {
+    const newSelected = new Set(selectedIds)
+    if (newSelected.has(id)) {
+      newSelected.delete(id)
+    } else {
+      newSelected.add(id)
+    }
+    setSelectedIds(newSelected)
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === signals.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(signals.map((s) => s.id)))
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return
+    if (!confirm(`Delete ${selectedIds.size} signal(s)? This cannot be undone.`)) return
+
+    setLoading(true)
+    setError(null)
+    try {
+      await bulkDeleteSignals(Array.from(selectedIds))
+      setSelectedIds(new Set())
+      await loadSignals(page)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete signals')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleBulkSeverityUpdate = async () => {
+    if (selectedIds.size === 0) return
+
+    setLoading(true)
+    setError(null)
+    try {
+      await bulkUpdateSeverity(
+        Array.from(selectedIds),
+        bulkSeverity as 'critical' | 'high' | 'medium' | 'low' | 'info'
+      )
+      setSelectedIds(new Set())
+      await loadSignals(page)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update severity')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleBulkMarkVerified = async () => {
+    if (selectedIds.size === 0) return
+
+    setLoading(true)
+    setError(null)
+    try {
+      await bulkMarkAsVerified(Array.from(selectedIds))
+      setSelectedIds(new Set())
+      await loadSignals(page)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to mark as verified')
     } finally {
       setLoading(false)
     }
@@ -174,6 +252,15 @@ export default function SignalsClient({ initialSignals, initialCount }: SignalsC
             <table className="w-full">
               <thead className="bg-slate-900/50 border-b border-slate-700">
                 <tr>
+                  <th className="px-4 py-3 text-left">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.size > 0 && selectedIds.size === signals.length}
+                      onChange={toggleSelectAll}
+                      disabled={loading}
+                      className="w-4 h-4 cursor-pointer"
+                    />
+                  </th>
                   <th className="px-6 py-3 text-left text-sm font-semibold text-slate-200">Title</th>
                   <th className="px-6 py-3 text-left text-sm font-semibold text-slate-200">Severity</th>
                   <th className="px-6 py-3 text-left text-sm font-semibold text-slate-200">Category</th>
@@ -183,7 +270,21 @@ export default function SignalsClient({ initialSignals, initialCount }: SignalsC
               </thead>
               <tbody className="divide-y divide-slate-700">
                 {signals.map((signal) => (
-                  <tr key={signal.id} className="hover:bg-slate-700/30 transition-colors">
+                  <tr
+                    key={signal.id}
+                    className={`transition-colors ${
+                      selectedIds.has(signal.id) ? 'bg-slate-700/50' : 'hover:bg-slate-700/30'
+                    }`}
+                  >
+                    <td className="px-4 py-4">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(signal.id)}
+                        onChange={() => toggleSelection(signal.id)}
+                        disabled={loading}
+                        className="w-4 h-4 cursor-pointer"
+                      />
+                    </td>
                     <td className="px-6 py-4">
                       <div className="max-w-xs">
                         <p className="text-sm text-slate-100 font-medium truncate">{signal.title}</p>
@@ -286,6 +387,18 @@ export default function SignalsClient({ initialSignals, initialCount }: SignalsC
           </div>
         </div>
       )}
+
+      {/* Bulk Operations Toolbar */}
+      <BulkOperationsToolbar
+        selectedCount={selectedIds.size}
+        loading={loading}
+        onDelete={handleBulkDelete}
+        onMarkVerified={handleBulkMarkVerified}
+        onClearSelection={() => setSelectedIds(new Set())}
+        severity={bulkSeverity}
+        onSeverityChange={setBulkSeverity}
+        onBulkSeverityUpdate={handleBulkSeverityUpdate}
+      />
     </div>
   )
 }
