@@ -41,11 +41,17 @@ export async function bulkAddTags(signalIds: string[], tagIds: string[]) {
     tagIds.map((tagId) => ({ signal_id: signalId, tag_id: tagId }))
   )
 
-  const { error } = await supabase.from('signal_tags').insert(insertData, {
-    onConflict: 'signal_id,tag_id',
-  })
+  // Ignore duplicates by just trying to insert
+  const { error } = await supabase
+    .from('signal_tags')
+    .insert(insertData)
+    .select()
 
-  if (error) throw error
+  // Ignore "duplicate key" errors
+  if (error && !error.message.includes('duplicate')) {
+    throw error
+  }
+
   revalidatePath('/admin/intel/signals')
   return { added: insertData.length }
 }
