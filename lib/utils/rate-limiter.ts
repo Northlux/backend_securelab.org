@@ -1,38 +1,52 @@
 /**
- * Rate Limiter for Import Operations
- * Tracks imports per user using a counter table in Supabase
+ * Rate Limiter for Sensitive Operations
+ *
+ * SECURITY: Prevents DOS attacks and user enumeration
+ * OWASP A10: Exceptional Conditions - Rate limiting for protection
+ *
+ * Tracks operations per user/identifier using in-memory counter
+ * In production, use Redis or Supabase for distributed rate limiting
  */
 
 // Create a simple in-memory cache for rate limiting (for development)
 // In production, use Redis or Supabase rate_limit_counters table
-const importLimits = new Map<string, { count: number; resetTime: number }>()
+const operationLimits = new Map<string, { count: number; resetTime: number }>()
 
 /**
- * Check if user has exceeded import rate limit
- * Limit: 5 imports per 1 minute per user
+ * Generic rate limit checker for any operation
+ *
+ * @param key - Unique identifier (userId, IP, etc.) combined with operation name
+ * @param maxRequests - Maximum requests allowed in time window
+ * @param windowMs - Time window in milliseconds
+ * @returns { allowed: boolean, remaining: number, resetSeconds: number }
  */
-export async function checkImportRateLimit(userId: string): Promise<{ allowed: boolean; remaining: number; resetSeconds: number }> {
+export function checkRateLimit(
+  key: string,
+  maxRequests: number = 5,
+  windowMs: number = 60000
+): {
+  allowed: boolean
+  remaining: number
+  resetSeconds: number
+} {
   const now = Date.now()
-  const ONE_MINUTE = 60 * 1000
-  const IMPORT_LIMIT = 5
-
-  let limit = importLimits.get(userId)
+  let limit = operationLimits.get(key)
 
   // If no entry or reset time passed, create new entry
   if (!limit || now > limit.resetTime) {
-    importLimits.set(userId, {
+    operationLimits.set(key, {
       count: 1,
-      resetTime: now + ONE_MINUTE,
+      resetTime: now + windowMs,
     })
     return {
       allowed: true,
-      remaining: IMPORT_LIMIT - 1,
-      resetSeconds: 60,
+      remaining: maxRequests - 1,
+      resetSeconds: Math.ceil(windowMs / 1000),
     }
   }
 
-  // Check if user exceeded limit
-  if (limit.count >= IMPORT_LIMIT) {
+  // Check if exceeded limit
+  if (limit.count >= maxRequests) {
     const resetSeconds = Math.ceil((limit.resetTime - now) / 1000)
     return {
       allowed: false,
@@ -43,14 +57,26 @@ export async function checkImportRateLimit(userId: string): Promise<{ allowed: b
 
   // Increment counter
   limit.count++
-  importLimits.set(userId, limit)
+  operationLimits.set(key, limit)
 
   const resetSeconds = Math.ceil((limit.resetTime - now) / 1000)
   return {
     allowed: true,
-    remaining: IMPORT_LIMIT - limit.count,
+    remaining: maxRequests - limit.count,
     resetSeconds,
   }
+}
+
+/**
+ * Check if user has exceeded import rate limit
+ * Limit: 5 imports per 1 minute per user
+ *
+ * DEPRECATED: Use checkRateLimit() instead
+ * Kept for backward compatibility
+ */
+export async function checkImportRateLimit(userId: string): Promise<{ allowed: boolean; remaining: number; resetSeconds: number }> {
+  const key = `import:${userId}`
+  return checkRateLimit(key, 5, 60 * 1000)
 }
 
 /**

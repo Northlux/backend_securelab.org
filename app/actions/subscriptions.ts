@@ -3,6 +3,8 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import { serverLog, handleDatabaseError } from '@/lib/utils/logger'
+import { logSubscriptionAction } from '@/lib/utils/audit-logger'
 
 // Validation schemas
 const CreateTierSchema = z.object({
@@ -91,7 +93,7 @@ export async function getSubscriptions(
     const { data, count, error } = await query
 
     if (error) {
-      console.error('Error fetching subscriptions:', error.message)
+      serverLog('error', 'getSubscriptions', 'Database query failed', { error: error.message })
       return { subscriptions: [], total: 0, page, pageSize }
     }
 
@@ -108,7 +110,7 @@ export async function getSubscriptions(
       pageSize,
     }
   } catch (error) {
-    console.error('Error fetching subscriptions:', error instanceof Error ? error.message : 'Unknown error')
+    serverLog('error', 'getSubscriptions', 'Failed to fetch subscriptions', { error })
     return { subscriptions: [], total: 0, page, pageSize }
   }
 }
@@ -127,7 +129,7 @@ export async function getSubscriptionById(subscriptionId: string): Promise<Subsc
       .single()
 
     if (error) {
-      console.error('Subscription fetch error:', error.message)
+      serverLog('warn', 'getSubscriptionById', `Subscription not found: ${subscriptionId}`)
       return null
     }
 
@@ -137,7 +139,7 @@ export async function getSubscriptionById(subscriptionId: string): Promise<Subsc
       tier_name: data.subscription_tiers?.name,
     } as Subscription
   } catch (error) {
-    console.error('Error fetching subscription:', error instanceof Error ? error.message : 'Unknown error')
+    handleDatabaseError('getSubscriptionById', error, 'fetch')
     return null
   }
 }
@@ -159,7 +161,7 @@ export async function getSubscriptionTiers(): Promise<SubscriptionTier[]> {
       .order('display_order', { ascending: true })
 
     if (error) {
-      console.error('Error fetching tiers:', error.message)
+      serverLog('error', 'getSubscriptionTiers', 'Database query failed', { error: error.message })
       return []
     }
 
@@ -168,7 +170,7 @@ export async function getSubscriptionTiers(): Promise<SubscriptionTier[]> {
       user_count: tier.subscriptions?.length || 0,
     })) as SubscriptionTier[]
   } catch (error) {
-    console.error('Error fetching tiers:', error instanceof Error ? error.message : 'Unknown error')
+    serverLog('error', 'getSubscriptionTiers', 'Failed to fetch tiers', { error })
     return []
   }
 }
@@ -191,7 +193,7 @@ export async function createSubscriptionTier(
       .single()
 
     if (error) {
-      console.error('Tier creation error:', error.message)
+      serverLog('error', 'createSubscriptionTier', 'Tier creation failed', { error: error.message })
       return { success: false, error: 'Failed to create tier' }
     }
 
@@ -199,6 +201,7 @@ export async function createSubscriptionTier(
     return { success: true, tier: tier as SubscriptionTier }
   } catch (error) {
     const message = error instanceof z.ZodError ? 'Invalid data provided' : 'Failed to create tier'
+    serverLog('error', 'createSubscriptionTier', message, { error })
     return { success: false, error: message }
   }
 }
@@ -221,7 +224,7 @@ export async function updateSubscriptionTier(
       .eq('id', tierId)
 
     if (error) {
-      console.error('Tier update error:', error.message)
+      serverLog('error', 'updateSubscriptionTier', `Tier update failed for ${tierId}`, { error: error.message })
       return { success: false, error: 'Failed to update tier' }
     }
 
@@ -229,6 +232,7 @@ export async function updateSubscriptionTier(
     return { success: true }
   } catch (error) {
     const message = error instanceof z.ZodError ? 'Invalid data provided' : 'Failed to update tier'
+    serverLog('error', 'updateSubscriptionTier', message, { error })
     return { success: false, error: message }
   }
 }
@@ -247,13 +251,17 @@ export async function deleteSubscriptionTier(tierId: string): Promise<{ success:
       .eq('id', tierId)
 
     if (error) {
-      console.error('Tier deletion error:', error.message)
+      serverLog('error', 'deleteSubscriptionTier', `Tier deletion failed for ${tierId}`, { error: error.message })
       return { success: false, error: 'Failed to delete tier' }
     }
+
+    // Log audit trail
+    await logSubscriptionAction(tierId, 'subscription_upgrade_reject', 'Tier deleted')
 
     revalidatePath('/admin/subscriptions/tiers')
     return { success: true }
   } catch (error) {
+    serverLog('error', 'deleteSubscriptionTier', 'Unexpected error deleting tier', { error })
     return { success: false, error: 'Failed to delete tier' }
   }
 }
@@ -280,14 +288,18 @@ export async function cancelSubscription(
       .eq('id', subscriptionId)
 
     if (error) {
-      console.error('Cancellation error:', error.message)
+      serverLog('error', 'cancelSubscription', `Subscription cancellation failed for ${subscriptionId}`, { error: error.message })
       return { success: false, error: 'Failed to cancel subscription' }
     }
+
+    // Log audit trail
+    await logSubscriptionAction(subscriptionId, 'subscription_cancel', validated.reason)
 
     revalidatePath('/admin/subscriptions')
     return { success: true }
   } catch (error) {
     const message = error instanceof z.ZodError ? 'Invalid data provided' : 'Failed to cancel subscription'
+    serverLog('error', 'cancelSubscription', message, { error })
     return { success: false, error: message }
   }
 }
@@ -318,13 +330,17 @@ export async function refundSubscription(
       ])
 
     if (error) {
-      console.error('Refund error:', error.message)
+      serverLog('error', 'refundSubscription', `Refund processing failed for subscription ${subscriptionId}`, { error: error.message })
       return { success: false, error: 'Failed to process refund' }
     }
+
+    // Log audit trail
+    await logSubscriptionAction(subscriptionId, 'subscription_refund', reason, { amount })
 
     revalidatePath('/admin/subscriptions')
     return { success: true }
   } catch (error) {
+    serverLog('error', 'refundSubscription', 'Unexpected error processing refund', { error })
     return { success: false, error: 'Failed to process refund' }
   }
 }
@@ -359,7 +375,7 @@ export async function getUpgradeRequests(
     const { data, count, error } = await query
 
     if (error) {
-      console.error('Error fetching upgrade requests:', error.message)
+      serverLog('error', 'getUpgradeRequests', 'Database query failed', { error: error.message })
       return { subscriptions: [], total: 0, page, pageSize }
     }
 
@@ -370,7 +386,7 @@ export async function getUpgradeRequests(
       pageSize,
     }
   } catch (error) {
-    console.error('Error fetching upgrade requests:', error instanceof Error ? error.message : 'Unknown error')
+    serverLog('error', 'getUpgradeRequests', 'Failed to fetch upgrade requests', { error })
     return { subscriptions: [], total: 0, page, pageSize }
   }
 }
@@ -395,13 +411,17 @@ export async function approveUpgradeRequest(
       .eq('id', requestId)
 
     if (error) {
-      console.error('Approval error:', error.message)
+      serverLog('error', 'approveUpgradeRequest', `Upgrade approval failed for request ${requestId}`, { error: error.message })
       return { success: false, error: 'Failed to approve request' }
     }
+
+    // Log audit trail
+    await logSubscriptionAction(requestId, 'subscription_upgrade_approve', notes)
 
     revalidatePath('/admin/subscriptions/requests')
     return { success: true }
   } catch (error) {
+    serverLog('error', 'approveUpgradeRequest', 'Unexpected error approving request', { error })
     return { success: false, error: 'Failed to approve request' }
   }
 }
@@ -426,13 +446,17 @@ export async function rejectUpgradeRequest(
       .eq('id', requestId)
 
     if (error) {
-      console.error('Rejection error:', error.message)
+      serverLog('error', 'rejectUpgradeRequest', `Upgrade rejection failed for request ${requestId}`, { error: error.message })
       return { success: false, error: 'Failed to reject request' }
     }
+
+    // Log audit trail
+    await logSubscriptionAction(requestId, 'subscription_upgrade_reject', reason)
 
     revalidatePath('/admin/subscriptions/requests')
     return { success: true }
   } catch (error) {
+    serverLog('error', 'rejectUpgradeRequest', 'Unexpected error rejecting request', { error })
     return { success: false, error: 'Failed to reject request' }
   }
 }
@@ -473,7 +497,7 @@ export async function getBillingHistory(
     const { data, count, error } = await query
 
     if (error) {
-      console.error('Error fetching billing history:', error.message)
+      serverLog('error', 'getBillingHistory', 'Database query failed', { error: error.message })
       return { subscriptions: [], total: 0, page, pageSize }
     }
 
@@ -484,7 +508,7 @@ export async function getBillingHistory(
       pageSize,
     }
   } catch (error) {
-    console.error('Error fetching billing history:', error instanceof Error ? error.message : 'Unknown error')
+    serverLog('error', 'getBillingHistory', 'Failed to fetch billing history', { error })
     return { subscriptions: [], total: 0, page, pageSize }
   }
 }
