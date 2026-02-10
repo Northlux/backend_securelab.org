@@ -1,218 +1,238 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { createClient } from '@supabase/supabase-js'
-import { ChevronDown, ChevronUp } from 'lucide-react'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import { useState } from 'react'
+import { Shield, Eye, UserX, Edit2 } from 'lucide-react'
 
 interface User {
   id: string
   email: string
+  full_name: string | null
+  role: 'admin' | 'user' | 'viewer'
+  status: 'active' | 'suspended'
   created_at: string
+  last_login_at: string | null
 }
 
-interface UserWithSubscription extends User {
-  subscription?: {
-    id: string
-    status: string
-    tier: {
-      id: string
-      name: string
-      display_name: string
-    }
-  }
-}
+const MOCK_USERS: User[] = [
+  {
+    id: '1',
+    email: 'admin@securelab.org',
+    full_name: 'Admin User',
+    role: 'admin',
+    status: 'active',
+    created_at: '2026-01-01T00:00:00Z',
+    last_login_at: '2026-02-10T10:30:00Z',
+  },
+  {
+    id: '2',
+    email: 'analyst@securelab.org',
+    full_name: 'Threat Analyst',
+    role: 'user',
+    status: 'active',
+    created_at: '2026-01-15T00:00:00Z',
+    last_login_at: '2026-02-09T15:45:00Z',
+  },
+  {
+    id: '3',
+    email: 'viewer@securelab.org',
+    full_name: 'Report Viewer',
+    role: 'viewer',
+    status: 'active',
+    created_at: '2026-02-01T00:00:00Z',
+    last_login_at: '2026-02-08T09:20:00Z',
+  },
+]
 
 export default function UsersPage() {
-  const [users, setUsers] = useState<UserWithSubscription[]>([])
-  const [loading, setLoading] = useState(true)
-  const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [tiers, setTiers] = useState<any[]>([])
-  const [updatingId, setUpdatingId] = useState<string | null>(null)
+  const [users, setUsers] = useState<User[]>(MOCK_USERS)
+  const [loading, setLoading] = useState(false)
+  const [search, setSearch] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editRole, setEditRole] = useState<'admin' | 'user' | 'viewer'>('user')
 
-  useEffect(() => {
-    fetchUsers()
-    fetchTiers()
-  }, [])
+  const filteredUsers = users.filter(
+    (user) =>
+      user.email.toLowerCase().includes(search.toLowerCase()) ||
+      user.full_name?.toLowerCase().includes(search.toLowerCase())
+  )
 
-  const fetchUsers = async () => {
+  const handleEditRole = (user: User) => {
+    setEditingId(user.id)
+    setEditRole(user.role)
+  }
+
+  const handleSaveRole = async (userId: string) => {
     setLoading(true)
-
-    // Get all users from auth (this requires admin privileges)
-    const { data: { users: authUsers }, error } = await supabase.auth.admin.listUsers()
-
-    if (!error && authUsers) {
-      // Fetch subscriptions for each user
-      const { data: subscriptions } = await supabase
-        .from('subscriptions')
-        .select('user_id, id, status, tier:subscription_tiers(id, name, display_name)')
-
-      const userMap = new Map((subscriptions as any[])?.map((s: any) => {
-        const tier = Array.isArray(s.tier) ? s.tier[0] : s.tier
-        return [s.user_id, { ...s, tier }]
-      }) || [])
-
-      const usersWithSubs: UserWithSubscription[] = authUsers.map(user => {
-        const sub = userMap.get(user.id) as any
-        return {
-          id: user.id,
-          email: user.email || 'Unknown',
-          created_at: user.created_at,
-          subscription: sub ? {
-            id: sub.id,
-            status: sub.status,
-            tier: {
-              id: sub.tier.id,
-              name: sub.tier.name,
-              display_name: sub.tier.display_name,
-            },
-          } : undefined,
-        }
-      })
-
-      setUsers(usersWithSubs)
-    }
-    setLoading(false)
-  }
-
-  const fetchTiers = async () => {
-    const { data } = await supabase
-      .from('subscription_tiers')
-      .select('*')
-      .eq('is_active', true)
-
-    if (data) {
-      setTiers(data)
-    }
-  }
-
-  const handleUpdateSubscription = async (userId: string, tierId: string) => {
-    setUpdatingId(userId)
-
-    const { error } = await supabase
-      .from('subscriptions')
-      .upsert(
-        {
-          user_id: userId,
-          tier_id: tierId,
-          status: 'active',
-        },
-        { onConflict: 'user_id' }
+    try {
+      setUsers(
+        users.map((u) =>
+          u.id === userId ? { ...u, role: editRole } : u
+        )
       )
-
-    if (!error) {
-      // Log to audit trail
-      await supabase.from('audit_logs').insert({
-        user_id: userId,
-        action: 'subscription_changed',
-        resource_type: 'subscription',
-        app_name: 'admin',
-        metadata: { new_tier: tierId },
-      })
-
-      fetchUsers()
+      setEditingId(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update role')
+    } finally {
+      setLoading(false)
     }
-    setUpdatingId(null)
+  }
+
+  const handleSuspend = async (userId: string) => {
+    if (!confirm('Suspend this user? They will not be able to access the system.')) return
+
+    setLoading(true)
+    try {
+      setUsers(
+        users.map((u) =>
+          u.id === userId ? { ...u, status: 'suspended' as const } : u
+        )
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to suspend user')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const roleIcon = (role: string) => {
+    switch (role) {
+      case 'admin':
+        return <Shield size={16} className="text-red-400" />
+      case 'user':
+        return <Edit2 size={16} className="text-blue-400" />
+      case 'viewer':
+        return <Eye size={16} className="text-slate-400" />
+      default:
+        return null
+    }
+  }
+
+  const statusBadge = (status: string) => {
+    return status === 'active'
+      ? 'bg-green-500/20 text-green-300'
+      : 'bg-red-500/20 text-red-300'
   }
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-slate-100">User Management</h1>
-        <p className="text-sm text-slate-400 mt-1">Manage platform users and subscriptions</p>
+        <h1 className="text-3xl font-bold text-slate-100">Users</h1>
+        <p className="text-sm text-slate-400 mt-1">Manage user accounts and permissions</p>
       </div>
 
-      <div className="text-sm text-slate-300 bg-slate-800/50 border border-slate-700 rounded-lg p-4">
-        Total Users: <span className="font-semibold text-brand-400">{users.length}</span>
+      {error && (
+        <div className="bg-red-500/20 border border-red-500 rounded-lg p-4 text-red-200">
+          {error}
+        </div>
+      )}
+
+      <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+        <input
+          type="text"
+          placeholder="Search by email or name..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          disabled={loading}
+          className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-slate-100 placeholder-slate-500 focus:border-brand-500 focus:outline-none"
+        />
       </div>
 
-      <div className="space-y-2">
-        {loading ? (
-          <div className="p-6 text-center text-slate-400 bg-slate-800/50 border border-slate-700 rounded-lg">
-            Loading users...
-          </div>
-        ) : users.length === 0 ? (
-          <div className="p-6 text-center text-slate-400 bg-slate-800/50 border border-slate-700 rounded-lg">
-            No users found
-          </div>
+      <div className="bg-slate-800/50 border border-slate-700 rounded-lg overflow-hidden">
+        {filteredUsers.length === 0 ? (
+          <div className="p-6 text-center text-slate-400">No users found</div>
         ) : (
-          users.map((user) => (
-            <div key={user.id} className="bg-slate-800/50 border border-slate-700 rounded-lg overflow-hidden">
-              <button
-                onClick={() => setExpandedId(expandedId === user.id ? null : user.id)}
-                className="w-full px-6 py-4 flex items-center gap-4 hover:bg-slate-700/30 transition-colors text-left"
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-slate-100 truncate">{user.email}</p>
-                  <p className="text-sm text-slate-400 mt-1">
-                    {user.subscription ? (
-                      <>
-                        Tier: <span className="text-brand-400">{user.subscription.tier.display_name}</span>
-                        {' '}
-                        | Status: <span className={user.subscription.status === 'active' ? 'text-green-400' : 'text-red-400'}>
-                          {user.subscription.status}
-                        </span>
-                      </>
-                    ) : (
-                      <span className="text-yellow-400">No subscription</span>
-                    )}
-                  </p>
-                </div>
-                {expandedId === user.id ? (
-                  <ChevronUp size={20} className="text-slate-400 flex-shrink-0" />
-                ) : (
-                  <ChevronDown size={20} className="text-slate-400 flex-shrink-0" />
-                )}
-              </button>
-
-              {expandedId === user.id && (
-                <div className="border-t border-slate-700 bg-slate-900/30 px-6 py-4 space-y-4">
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <p className="text-slate-400 mb-1">User ID</p>
-                      <p className="text-slate-100 font-mono text-xs break-all">{user.id}</p>
-                    </div>
-                    <div>
-                      <p className="text-slate-400 mb-1">Created</p>
-                      <p className="text-slate-100">{new Date(user.created_at).toLocaleDateString()}</p>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm text-slate-300 mb-2">Change Subscription Tier</label>
-                    <div className="flex gap-2">
-                      <select
-                        defaultValue={user.subscription?.tier?.id || ''}
-                        onChange={(e) => handleUpdateSubscription(user.id, e.target.value)}
-                        disabled={updatingId === user.id}
-                        className="flex-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded text-slate-100 focus:border-brand-500 focus:outline-none disabled:opacity-50"
-                      >
-                        <option value="">Select a tier...</option>
-                        {tiers.map((tier) => (
-                          <option key={tier.id} value={tier.id}>
-                            {tier.display_name} ({tier.name})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  {user.subscription && (
-                    <div>
-                      <p className="text-sm text-slate-400 mb-2">Current Subscription ID</p>
-                      <p className="text-xs font-mono text-slate-300 bg-slate-800/50 p-2 rounded break-all">
-                        {user.subscription.id}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          ))
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-slate-900/50 border-b border-slate-700">
+                <tr>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-slate-200">Email</th>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-slate-200">Name</th>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-slate-200">Role</th>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-slate-200">Status</th>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-slate-200">Last Login</th>
+                  <th className="px-6 py-3 text-right text-sm font-semibold text-slate-200">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-700">
+                {filteredUsers.map((user) => (
+                  <tr key={user.id} className="hover:bg-slate-700/30 transition-colors">
+                    <td className="px-6 py-4 text-sm text-slate-100">{user.email}</td>
+                    <td className="px-6 py-4 text-sm text-slate-300">{user.full_name || '-'}</td>
+                    <td className="px-6 py-4">
+                      {editingId === user.id ? (
+                        <div className="flex gap-2">
+                          <select
+                            value={editRole}
+                            onChange={(e) => setEditRole(e.target.value as any)}
+                            disabled={loading}
+                            className="px-2 py-1 text-xs bg-slate-700 border border-slate-600 rounded text-slate-100"
+                          >
+                            <option value="admin">Admin</option>
+                            <option value="user">User</option>
+                            <option value="viewer">Viewer</option>
+                          </select>
+                          <button
+                            onClick={() => handleSaveRole(user.id)}
+                            disabled={loading}
+                            className="px-2 py-1 text-xs bg-brand-600 text-white rounded hover:bg-brand-700 disabled:opacity-50"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => setEditingId(null)}
+                            disabled={loading}
+                            className="px-2 py-1 text-xs bg-slate-700 text-slate-100 rounded hover:bg-slate-600 disabled:opacity-50"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 text-sm text-slate-300">
+                          {roleIcon(user.role)}
+                          <span className="capitalize">{user.role}</span>
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${statusBadge(user.status)}`}>
+                        {user.status.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-slate-400">
+                      {user.last_login_at
+                        ? new Date(user.last_login_at).toLocaleString()
+                        : 'Never'}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex gap-2 justify-end">
+                        {editingId !== user.id && (
+                          <>
+                            <button
+                              onClick={() => handleEditRole(user)}
+                              disabled={loading}
+                              className="p-1 text-slate-400 hover:text-brand-400 disabled:opacity-50 transition-colors"
+                              title="Edit role"
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                            <button
+                              onClick={() => handleSuspend(user.id)}
+                              disabled={loading || user.status === 'suspended'}
+                              className="p-1 text-slate-400 hover:text-yellow-400 disabled:opacity-50 transition-colors"
+                              title="Suspend user"
+                            >
+                              <UserX size={16} />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

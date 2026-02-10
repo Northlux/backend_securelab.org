@@ -186,12 +186,12 @@ async function fetchSignalTrend(
     for (let i = 0; i < 30; i++) {
       const date = new Date()
       date.setDate(date.getDate() - i)
-      const dateStr = date.toISOString().split('T')[0]
+      const dateStr = date.toISOString().split('T')[0] || ''
       dayMap.set(dateStr, 0)
     }
 
     for (const signal of signals) {
-      const dateStr = new Date(signal.created_at).toISOString().split('T')[0]
+      const dateStr = new Date(signal.created_at).toISOString().split('T')[0] || ''
       if (dayMap.has(dateStr)) {
         dayMap.set(dateStr, (dayMap.get(dateStr) || 0) + 1)
       }
@@ -219,7 +219,7 @@ async function fetchSourceRanking(
       return []
     }
 
-    const signals = (data as Array<{ source_id: string | null; sources: { name: string } | null }>) || []
+    const signals = (data as Array<any>) || []
     const sourceMap = new Map<string, number>()
 
     for (const signal of signals) {

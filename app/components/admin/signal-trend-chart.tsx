@@ -22,9 +22,9 @@ export function SignalTrendChart({ data, title = 'Signals (Last 30 Days)' }: Sig
     )
   }
 
-  const maxCount = Math.max(...data.map((d) => d.count), 1)
-  const minDate = new Date(data[0].date)
-  const maxDate = new Date(data[data.length - 1].date)
+  const maxCount = data.length > 0 ? Math.max(...data.map((d) => d.count), 1) : 1
+  const minDate = data.length > 0 ? new Date(data[0]?.date || '') : new Date()
+  const maxDate = data.length > 0 ? new Date(data[data.length - 1]?.date || '') : new Date()
 
   return (
     <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-6">

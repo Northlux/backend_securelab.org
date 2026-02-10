@@ -42,14 +42,14 @@ export function SeverityDistribution({ data, title = 'Signals by Severity' }: Se
       <div className="space-y-3">
         {sortedData.map((item) => {
           const percentage = total > 0 ? (item.count / total) * 100 : 0
-          const colors = severityColors[item.severity] || severityColors.info
+          const colors = severityColors[item.severity] || severityColors['info']
 
           return (
             <div key={item.severity} className="space-y-1">
               <div className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${colors.dot}`} />
-                  <span className={`font-medium capitalize ${colors.text}`}>{item.severity}</span>
+                  <div className={`w-2 h-2 rounded-full ${colors?.dot || 'bg-slate-500'}`} />
+                  <span className={`font-medium capitalize ${colors?.text || 'text-slate-300'}`}>{item.severity}</span>
                 </div>
                 <div className="text-slate-400">
                   <span className="font-semibold">{item.count}</span>
@@ -58,7 +58,7 @@ export function SeverityDistribution({ data, title = 'Signals by Severity' }: Se
               </div>
               <div className="w-full bg-slate-700 rounded-full h-2 overflow-hidden">
                 <div
-                  className={`h-full transition-all rounded-full ${colors.bg.replace('20', '').replace('/20', '')}`}
+                  className={`h-full transition-all rounded-full ${(colors?.bg || 'bg-slate-500/20').replace('20', '').replace('/20', '')}`}
                   style={{ width: `${percentage}%` }}
                 />
               </div>
