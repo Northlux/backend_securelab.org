@@ -91,9 +91,14 @@ export default function ImportPage() {
           return
         }
 
-        // ✅ TODO: Add role verification
-        // Example: Check if user.user_metadata?.role === 'admin'
-        // For now: assumes all authenticated /admin users are admins
+        // ✅ Verify user has admin or analyst role
+        const userRole = user.user_metadata?.role as string | undefined
+        if (userRole !== 'admin' && userRole !== 'analyst') {
+          console.warn('Unauthorized: User role is', userRole)
+          setIsAuthorized(false)
+          return
+        }
+
         setIsAuthorized(true)
       } catch (err) {
         console.error('Auth check failed:', err)

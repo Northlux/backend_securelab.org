@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
+import { checkImportRateLimit } from './rate-limiter';
 
 // Validation schema for signals
 const SeveritySchema = z.enum(['critical', 'high', 'medium', 'low', 'info']);
@@ -298,6 +299,7 @@ export async function importSignalsFromJson(
   );
 
   // ✅ Verify user session is still valid
+  let userId: string;
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
@@ -308,12 +310,26 @@ export async function importSignalsFromJson(
         details: [],
       };
     }
+    userId = user.id;
   } catch (err) {
     console.error('Session validation failed:', err instanceof Error ? err.message : 'Unknown error');
     return {
       imported: 0,
       skipped: 0,
       errors: ['Authentication error. Please log in again.'],
+      details: [],
+    };
+  }
+
+  // ✅ Check rate limit (5 imports per minute per user)
+  const rateLimitCheck = await checkImportRateLimit(userId);
+  if (!rateLimitCheck.allowed) {
+    return {
+      imported: 0,
+      skipped: 0,
+      errors: [
+        `Too many import requests. Please wait ${rateLimitCheck.resetSeconds} seconds before importing again.`,
+      ],
       details: [],
     };
   }
