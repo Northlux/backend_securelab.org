@@ -39,3 +39,13 @@ yarn-error.log*
 
 # OS
 Thumbs.db
+
+# LOCAL_ONLY - NEVER commit this folder to GitHub
+# Use this for:
+# - Local development scripts
+# - Handoff documentation for external systems
+# - Sensitive local configuration
+# - Testing artifacts
+# - Temporary files
+LOCAL_ONLY/
+/LOCAL_ONLY
