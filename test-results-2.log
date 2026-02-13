@@ -1,0 +1,268 @@
+
+Running 15 tests using 1 worker
+
+  ✘   1 tests/comprehensive.spec.ts:7:7 › Admin Intel Management System - Comprehensive Tests › Dashboard page loads and displays analytics (5.3s)
+  ✘   2 tests/comprehensive.spec.ts:29:7 › Admin Intel Management System - Comprehensive Tests › Sources page loads and CRUD works (5.3s)
+  ✘   3 tests/comprehensive.spec.ts:57:7 › Admin Intel Management System - Comprehensive Tests › Signals page loads with pagination and filters (5.3s)
+⚠️ No signal data to test bulk selection with
+  ✓   4 tests/comprehensive.spec.ts:84:7 › Admin Intel Management System - Comprehensive Tests › Signals page supports bulk selection (327ms)
+  ✘   5 tests/comprehensive.spec.ts:100:7 › Admin Intel Management System - Comprehensive Tests › Tags page loads with CRUD operations (5.2s)
+  ✘   6 tests/comprehensive.spec.ts:124:7 › Admin Intel Management System - Comprehensive Tests › Logs page loads and displays ingestion logs (5.3s)
+  ✘   7 tests/comprehensive.spec.ts:140:7 › Admin Intel Management System - Comprehensive Tests › Users management page loads (5.3s)
+  ✘   8 tests/comprehensive.spec.ts:158:7 › Admin Intel Management System - Comprehensive Tests › Subscriptions management page loads (5.3s)
+⚠️ Navigation menu structure different than expected
+  ✓   9 tests/comprehensive.spec.ts:176:7 › Admin Intel Management System - Comprehensive Tests › Admin navigation menu works (343ms)
+  ✘  10 tests/comprehensive.spec.ts:190:7 › Admin Intel Management System - Comprehensive Tests › Pages are responsive on mobile (5.2s)
+✅ Invalid routes handled (status: 200)
+  ✓  11 tests/comprehensive.spec.ts:202:7 › Admin Intel Management System - Comprehensive Tests › Invalid routes handle gracefully (235ms)
+✅ Sources page has no console errors
+  ✓  12 tests/comprehensive.spec.ts:212:7 › Admin Intel Management System - Comprehensive Tests › Sources page TypeScript compiles and runs (1.2s)
+✅ Signals page has no console errors
+  ✓  13 tests/comprehensive.spec.ts:233:7 › Admin Intel Management System - Comprehensive Tests › Signals page TypeScript compiles and runs (1.2s)
+✅ Dashboard charts are rendered (1 elements)
+  ✓  14 tests/comprehensive.spec.ts:252:7 › Admin Intel Management System - Comprehensive Tests › Dashboard analytics charts render (258ms)
+  ✘  15 tests/comprehensive.spec.ts:266:7 › Admin Intel Management System - Comprehensive Tests › Forms prevent invalid submissions (30.0s)
+
+
+  1) tests/comprehensive.spec.ts:7:7 › Admin Intel Management System - Comprehensive Tests › Dashboard page loads and displays analytics 
+
+    Error: [2mexpect([22m[31mpage[39m[2m).[22mtoHaveTitle[2m([22m[32mexpected[39m[2m)[22m failed
+
+    Expected pattern: [32m/Intel/[39m
+    Received string:  [31m"SECURELAB // THREAT INTEL"[39m
+    Timeout: 5000ms
+
+    Call log:
+    [2m  - Expect "toHaveTitle" with timeout 5000ms[22m
+    [2m    9 × unexpected value "SECURELAB // THREAT INTEL"[22m
+
+
+       9 |
+      10 |     // Check page title
+    > 11 |     await expect(page).toHaveTitle(/Intel/)
+         |                        ^
+      12 |
+      13 |     // Check main heading
+      14 |     await expect(page.locator('h1')).toContainText('Threat Intelligence Dashboard')
+        at /home/muttley/projects/websites/securelab/backend_securelab.org/tests/comprehensive.spec.ts:11:24
+
+    Error Context: test-results/tests-comprehensive-Admin--292a0-oads-and-displays-analytics/error-context.md
+
+  2) tests/comprehensive.spec.ts:29:7 › Admin Intel Management System - Comprehensive Tests › Sources page loads and CRUD works 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoContainText[2m([22m[32mexpected[39m[2m)[22m failed
+
+    Locator: locator('h1')
+    Expected substring: [32m"Intel Sources"[39m
+    Received string:    [31m"THREAT INTEL"[39m
+    Timeout: 5000ms
+
+    Call log:
+    [2m  - Expect "toContainText" with timeout 5000ms[22m
+    [2m  - waiting for locator('h1')[22m
+    [2m    9 × locator resolved to <h1 class="text-2xl font-bold text-slate-100 mt-4">THREAT INTEL</h1>[22m
+    [2m      - unexpected value "THREAT INTEL"[22m
+
+
+      31 |
+      32 |     // Check page title
+    > 33 |     await expect(page.locator('h1')).toContainText('Intel Sources')
+         |                                      ^
+      34 |
+      35 |     // Check for Add Source button
+      36 |     const addButton = page.locator('button:has-text("Add Source")')
+        at /home/muttley/projects/websites/securelab/backend_securelab.org/tests/comprehensive.spec.ts:33:38
+
+    Error Context: test-results/tests-comprehensive-Admin--d2210-s-page-loads-and-CRUD-works/error-context.md
+
+  3) tests/comprehensive.spec.ts:57:7 › Admin Intel Management System - Comprehensive Tests › Signals page loads with pagination and filters 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoContainText[2m([22m[32mexpected[39m[2m)[22m failed
+
+    Locator: locator('h1')
+    Expected substring: [32m"T[7mhreat Signals[27m"[39m
+    Received string:    [31m"T[7mHREAT INTEL[27m"[39m
+    Timeout: 5000ms
+
+    Call log:
+    [2m  - Expect "toContainText" with timeout 5000ms[22m
+    [2m  - waiting for locator('h1')[22m
+    [2m    9 × locator resolved to <h1 class="text-2xl font-bold text-slate-100 mt-4">THREAT INTEL</h1>[22m
+    [2m      - unexpected value "THREAT INTEL"[22m
+
+
+      59 |
+      60 |     // Check page title
+    > 61 |     await expect(page.locator('h1')).toContainText('Threat Signals')
+         |                                      ^
+      62 |
+      63 |     // Check search box
+      64 |     const searchBox = page.locator('input[placeholder*="Search"]')
+        at /home/muttley/projects/websites/securelab/backend_securelab.org/tests/comprehensive.spec.ts:61:38
+
+    Error Context: test-results/tests-comprehensive-Admin--3a781-with-pagination-and-filters/error-context.md
+
+  4) tests/comprehensive.spec.ts:100:7 › Admin Intel Management System - Comprehensive Tests › Tags page loads with CRUD operations 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoContainText[2m([22m[32mexpected[39m[2m)[22m failed
+
+    Locator: locator('h1')
+    Expected substring: [32m"T[7mags[27m"[39m
+    Received string:    [31m"T[7mHREAT INTEL[27m"[39m
+    Timeout: 5000ms
+
+    Call log:
+    [2m  - Expect "toContainText" with timeout 5000ms[22m
+    [2m  - waiting for locator('h1')[22m
+    [2m    9 × locator resolved to <h1 class="text-2xl font-bold text-slate-100 mt-4">THREAT INTEL</h1>[22m
+    [2m      - unexpected value "THREAT INTEL"[22m
+
+
+      102 |
+      103 |     // Check page title
+    > 104 |     await expect(page.locator('h1')).toContainText('Tags')
+          |                                      ^
+      105 |
+      106 |     // Check Add Tag button
+      107 |     const addButton = page.locator('button:has-text("Add Tag")')
+        at /home/muttley/projects/websites/securelab/backend_securelab.org/tests/comprehensive.spec.ts:104:38
+
+    Error Context: test-results/tests-comprehensive-Admin--75200--loads-with-CRUD-operations/error-context.md
+
+  5) tests/comprehensive.spec.ts:124:7 › Admin Intel Management System - Comprehensive Tests › Logs page loads and displays ingestion logs 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoContainText[2m([22m[32mexpected[39m[2m)[22m failed
+
+    Locator: locator('h1')
+    Expected substring: [32m"Ingestion Logs"[39m
+    Received string:    [31m"THREAT INTEL"[39m
+    Timeout: 5000ms
+
+    Call log:
+    [2m  - Expect "toContainText" with timeout 5000ms[22m
+    [2m  - waiting for locator('h1')[22m
+    [2m    9 × locator resolved to <h1 class="text-2xl font-bold text-slate-100 mt-4">THREAT INTEL</h1>[22m
+    [2m      - unexpected value "THREAT INTEL"[22m
+
+
+      126 |
+      127 |     // Check page title
+    > 128 |     await expect(page.locator('h1')).toContainText('Ingestion Logs')
+          |                                      ^
+      129 |
+      130 |     // Check table exists
+      131 |     await expect(page.locator('table')).toBeVisible()
+        at /home/muttley/projects/websites/securelab/backend_securelab.org/tests/comprehensive.spec.ts:128:38
+
+    Error Context: test-results/tests-comprehensive-Admin--8c90f-and-displays-ingestion-logs/error-context.md
+
+  6) tests/comprehensive.spec.ts:140:7 › Admin Intel Management System - Comprehensive Tests › Users management page loads 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoContainText[2m([22m[32mexpected[39m[2m)[22m failed
+
+    Locator: locator('h1')
+    Expected substring: [32m"Users"[39m
+    Received string:    [31m"THREAT INTEL"[39m
+    Timeout: 5000ms
+
+    Call log:
+    [2m  - Expect "toContainText" with timeout 5000ms[22m
+    [2m  - waiting for locator('h1')[22m
+    [2m    9 × locator resolved to <h1 class="text-2xl font-bold text-slate-100 mt-4">THREAT INTEL</h1>[22m
+    [2m      - unexpected value "THREAT INTEL"[22m
+
+
+      142 |
+      143 |     // Check page title
+    > 144 |     await expect(page.locator('h1')).toContainText('Users')
+          |                                      ^
+      145 |
+      146 |     // Check search box
+      147 |     await expect(page.locator('input[placeholder*="Search"]')).toBeVisible()
+        at /home/muttley/projects/websites/securelab/backend_securelab.org/tests/comprehensive.spec.ts:144:38
+
+    Error Context: test-results/tests-comprehensive-Admin--a34c9-Users-management-page-loads/error-context.md
+
+  7) tests/comprehensive.spec.ts:158:7 › Admin Intel Management System - Comprehensive Tests › Subscriptions management page loads 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoContainText[2m([22m[32mexpected[39m[2m)[22m failed
+
+    Locator: locator('h1')
+    Expected substring: [32m"Subscriptions"[39m
+    Received string:    [31m"THREAT INTEL"[39m
+    Timeout: 5000ms
+
+    Call log:
+    [2m  - Expect "toContainText" with timeout 5000ms[22m
+    [2m  - waiting for locator('h1')[22m
+    [2m    9 × locator resolved to <h1 class="text-2xl font-bold text-slate-100 mt-4">THREAT INTEL</h1>[22m
+    [2m      - unexpected value "THREAT INTEL"[22m
+
+
+      160 |
+      161 |     // Check page title
+    > 162 |     await expect(page.locator('h1')).toContainText('Subscriptions')
+          |                                      ^
+      163 |
+      164 |     // Check search box
+      165 |     await expect(page.locator('input[placeholder*="Search"]')).toBeVisible()
+        at /home/muttley/projects/websites/securelab/backend_securelab.org/tests/comprehensive.spec.ts:162:38
+
+    Error Context: test-results/tests-comprehensive-Admin--0dd88-tions-management-page-loads/error-context.md
+
+  8) tests/comprehensive.spec.ts:190:7 › Admin Intel Management System - Comprehensive Tests › Pages are responsive on mobile 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: locator('table')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 5000ms[22m
+    [2m  - waiting for locator('table')[22m
+
+
+      194 |
+      195 |     // Check table is still visible (may be scrollable)
+    > 196 |     await expect(page.locator('table')).toBeVisible()
+          |                                         ^
+      197 |
+      198 |     console.log('✅ Pages are responsive on mobile (375x667)')
+      199 |   })
+        at /home/muttley/projects/websites/securelab/backend_securelab.org/tests/comprehensive.spec.ts:196:41
+
+    Error Context: test-results/tests-comprehensive-Admin--05dd2-es-are-responsive-on-mobile/error-context.md
+
+  9) tests/comprehensive.spec.ts:266:7 › Admin Intel Management System - Comprehensive Tests › Forms prevent invalid submissions 
+
+    [31mTest timeout of 30000ms exceeded.[39m
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+    [2m  - waiting for locator('button:has-text("Add Source")')[22m
+
+
+      268 |
+      269 |     // Click Add Source
+    > 270 |     await page.locator('button:has-text("Add Source")').click()
+          |                                                         ^
+      271 |
+      272 |     // Check if Create button is disabled without form data
+      273 |     const createButton = page.locator('button:has-text("Create")')
+        at /home/muttley/projects/websites/securelab/backend_securelab.org/tests/comprehensive.spec.ts:270:57
+
+    Error Context: test-results/tests-comprehensive-Admin--1e660-prevent-invalid-submissions/error-context.md
+
+  9 failed
+    tests/comprehensive.spec.ts:7:7 › Admin Intel Management System - Comprehensive Tests › Dashboard page loads and displays analytics 
+    tests/comprehensive.spec.ts:29:7 › Admin Intel Management System - Comprehensive Tests › Sources page loads and CRUD works 
+    tests/comprehensive.spec.ts:57:7 › Admin Intel Management System - Comprehensive Tests › Signals page loads with pagination and filters 
+    tests/comprehensive.spec.ts:100:7 › Admin Intel Management System - Comprehensive Tests › Tags page loads with CRUD operations 
+    tests/comprehensive.spec.ts:124:7 › Admin Intel Management System - Comprehensive Tests › Logs page loads and displays ingestion logs 
+    tests/comprehensive.spec.ts:140:7 › Admin Intel Management System - Comprehensive Tests › Users management page loads 
+    tests/comprehensive.spec.ts:158:7 › Admin Intel Management System - Comprehensive Tests › Subscriptions management page loads 
+    tests/comprehensive.spec.ts:190:7 › Admin Intel Management System - Comprehensive Tests › Pages are responsive on mobile 
+    tests/comprehensive.spec.ts:266:7 › Admin Intel Management System - Comprehensive Tests › Forms prevent invalid submissions 
+  6 passed (1.5m)

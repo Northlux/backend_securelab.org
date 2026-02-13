@@ -10,20 +10,61 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 
 export type AuditAction =
-  | 'subscription_cancel'
-  | 'subscription_refund'
-  | 'subscription_upgrade_approve'
-  | 'subscription_upgrade_reject'
+  // User actions
   | 'user_role_change'
   | 'user_suspend'
   | 'user_unsuspend'
   | 'user_delete'
+  | 'bulk_update_user_roles'
+  | 'bulk_suspend_users'
+  // Subscription actions
+  | 'subscription_cancel'
+  | 'subscription_refund'
+  | 'subscription_upgrade_approve'
+  | 'subscription_upgrade_reject'
+  | 'subscription_tier_create'
+  | 'subscription_tier_update'
+  | 'subscription_tier_delete'
+  // Signal actions
+  | 'signal_create'
+  | 'signal_update'
+  | 'signal_delete'
+  | 'signal_toggle_verification'
+  | 'signal_toggle_featured'
+  | 'signal_verify'
+  | 'signal_feature'
+  | 'signal_severity_update'
+  | 'signal_update_severity'
+  | 'signal_tag_add'
+  | 'signal_tag_remove'
+  | 'bulk_delete_signals'
+  | 'bulk_update_severity'
+  | 'bulk_add_tags'
+  | 'bulk_remove_tags'
+  | 'bulk_mark_verified'
+  | 'bulk_unmark_verified'
+  // Source actions
+  | 'source_create'
+  | 'source_update'
+  | 'source_delete'
+  | 'source_toggle'
+  // Tag actions
+  | 'tag_create'
+  | 'tag_update'
+  | 'tag_delete'
+  // Log actions
+  | 'ingestion_log_create'
+  | 'ingestion_log_update'
+  | 'ingestion_log_delete'
+  // Cron actions
+  | 'cron_hourly_executed'
+  | 'cron_daily_executed'
 
 export interface AuditLogEntry {
   action: AuditAction
   userId: string
   targetId: string // ID of resource being modified
-  targetType: 'subscription' | 'user' | 'upgrade_request'
+  targetType: 'subscription' | 'user' | 'upgrade_request' | 'signal' | 'source' | 'tag' | 'log' | 'system' | string
   changes?: Record<string, unknown>
   reason?: string
   ipAddress?: string
@@ -91,19 +132,42 @@ export async function logSubscriptionAction(
 }
 
 /**
- * Convenience function to log user action
+ * Convenience function to log any action (generic)
+ * Supports all action types with flexible parameters
  */
 export async function logUserAction(
-  userId: string,
-  action: Extract<AuditAction, 'user_role_change' | 'user_suspend' | 'user_unsuspend' | 'user_delete'>,
-  reason?: string,
-  changes?: Record<string, unknown>
+  callingUserId: string,
+  action: AuditAction,
+  targetType?: string,
+  targetId?: string,
+  changes?: Record<string, unknown>,
+  reason?: string
 ): Promise<void> {
+  // Determine target type based on action if not provided
+  let resolvedTargetType = targetType || 'user'
+
+  // Map actions to their target types
+  if (!targetType) {
+    if (action.includes('subscription')) {
+      resolvedTargetType = 'subscription'
+    } else if (action.includes('signal') || action.includes('bulk')) {
+      resolvedTargetType = 'signal'
+    } else if (action.includes('source')) {
+      resolvedTargetType = 'source'
+    } else if (action.includes('tag')) {
+      resolvedTargetType = 'tag'
+    } else if (action.includes('ingestion_log')) {
+      resolvedTargetType = 'log'
+    } else if (action.includes('cron')) {
+      resolvedTargetType = 'system'
+    }
+  }
+
   await logAuditAction({
     action,
-    userId: 'unknown', // Will be overwritten by authenticated user
-    targetId: userId,
-    targetType: 'user',
+    userId: callingUserId,
+    targetId: targetId || callingUserId,
+    targetType: (resolvedTargetType || 'user') as any,
     changes,
     reason,
   })

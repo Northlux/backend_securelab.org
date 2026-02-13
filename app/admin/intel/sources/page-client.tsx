@@ -47,18 +47,18 @@ export default function SourcesClient({ initialSources }: SourcesClientProps) {
       if (editingId) {
         await updateSource(editingId, {
           name: formData.name,
-          source_type: formData.source_type,
+          source_type: formData.source_type as 'rss' | 'api' | 'web' | 'database' | 'manual',
           url: formData.url || null,
-          update_frequency: formData.update_frequency,
+          update_frequency: formData.update_frequency as 'daily' | 'hourly' | 'monthly' | 'manual' | 'weekly',
           priority: formData.priority,
           is_active: true,
         })
       } else {
         await createSource({
           name: formData.name,
-          source_type: formData.source_type,
+          source_type: formData.source_type as 'rss' | 'api' | 'web' | 'database' | 'manual',
           url: formData.url || null,
-          update_frequency: formData.update_frequency,
+          update_frequency: formData.update_frequency as 'daily' | 'hourly' | 'monthly' | 'manual' | 'weekly',
           priority: formData.priority,
           is_active: true,
         })

@@ -1,13 +1,20 @@
 'use server'
 
-import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createServerSupabaseAnonClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { serverLog, handleDatabaseError } from '@/lib/utils/logger'
+import { getCurrentUser, requireAdmin } from '@/lib/auth/server-auth'
 import { checkRateLimit } from '@/lib/utils/rate-limiter'
 import { logUserAction } from '@/lib/utils/audit-logger'
+import { isValidUuid } from '@/lib/utils/sanitize'
+import { createRateLimitKey, getRateLimit, type RateLimitKey } from '@/lib/utils/rate-limits'
 
 // Validation schemas
+const PaginationSchema = z.object({
+  page: z.number().int().min(1).default(1),
+  pageSize: z.number().int().min(1).max(100).default(20),
+})
+
 const UpdateUserSchema = z.object({
   role: z.enum(['admin', 'analyst', 'user']),
   status: z.enum(['active', 'suspended', 'pending']),
@@ -15,6 +22,18 @@ const UpdateUserSchema = z.object({
 
 const SuspendUserSchema = z.object({
   reason: z.string().min(5).max(500),
+})
+
+const BulkUserIdsSchema = z.array(z.string().uuid()).min(1).max(1000)
+
+const BulkSuspendSchema = z.object({
+  userIds: BulkUserIdsSchema,
+  reason: z.string().min(5).max(500),
+})
+
+const BulkRoleSchema = z.object({
+  userIds: BulkUserIdsSchema,
+  role: z.enum(['admin', 'analyst', 'user']),
 })
 
 export interface User {
@@ -39,6 +58,9 @@ export interface UserListResponse {
 
 /**
  * Get paginated list of users with optional filtering
+ * ✅ Auth check: Any authenticated user
+ * ✅ Rate limiting: 1000/hour (read operation)
+ * ✅ Input validation: Pagination
  */
 export async function getUsers(
   page = 1,
@@ -49,74 +71,138 @@ export async function getUsers(
     search?: string
   }
 ): Promise<UserListResponse> {
-  // Note: For now, return empty list - integrate with Supabase auth when available
-  // In production, would query auth.users() with Supabase Admin API
   try {
+    // Auth check
+    const user = await getCurrentUser()
+
+    // Input validation
+    const validatedPagination = PaginationSchema.parse({ page, pageSize })
+
+    // Rate limiting
+    const rateLimit = checkRateLimit(
+      createRateLimitKey(user.userId, 'USER_LIST' as RateLimitKey),
+      getRateLimit('USER_LIST' as RateLimitKey).max,
+      getRateLimit('USER_LIST' as RateLimitKey).window
+    )
+
+    if (!rateLimit.allowed) {
+      throw new Error(
+        `Rate limit exceeded. Try again in ${rateLimit.resetSeconds} seconds.`
+      )
+    }
+
+    const from = (validatedPagination.page - 1) * validatedPagination.pageSize
+
+    let query = (await createServerSupabaseAnonClient())
+      .from('users')
+      .select('*', { count: 'exact' })
+      .range(from, from + validatedPagination.pageSize - 1)
+      .order('created_at', { ascending: false })
+
+    // Apply filters if provided
+    if (_filters?.status) {
+      query = query.eq('status', _filters.status)
+    }
+    if (_filters?.role) {
+      query = query.eq('user_metadata->>role', _filters.role)
+    }
+
+    const { data, count, error } = await query
+
+    if (error) throw error
+
     return {
-      users: [],
-      total: 0,
-      page,
-      pageSize,
+      users: (data || []) as User[],
+      total: count || 0,
+      page: validatedPagination.page,
+      pageSize: validatedPagination.pageSize,
     }
   } catch (error) {
-    console.error('Error fetching users:', error instanceof Error ? error.message : 'Unknown error')
-    throw new Error('Failed to fetch users')
+    console.error('[getUsers] Error:', error)
+    throw error
   }
 }
 
 /**
  * Get single user by ID
- * SECURITY: Rate limited to prevent enumeration attacks (OWASP A10)
+ * ✅ Auth check: Any authenticated user
+ * ✅ Rate limiting: 1000/hour (read operation, per-user enumeration protection)
+ * ✅ Input validation: UUID
  */
 export async function getUserById(userId: string): Promise<User | null> {
-  const supabase = await createServerSupabaseClient()
-
-  // Check rate limit: max 30 requests per minute per user
-  const rateLimitKey = `get-user:${userId}`
-  const rateLimit = checkRateLimit(rateLimitKey, 30, 60 * 1000)
-
-  if (!rateLimit.allowed) {
-    serverLog(
-      'warn',
-      'getUserById',
-      `Rate limit exceeded for user lookup (${rateLimitKey}). Reset in ${rateLimit.resetSeconds}s`
-    )
-    return null
-  }
-
   try {
+    // Auth check
+    const user = await getCurrentUser()
+
+    // Input validation
+    if (!isValidUuid(userId)) {
+      throw new Error('Invalid user ID format')
+    }
+
+    // Rate limiting
+    const rateLimit = checkRateLimit(
+      createRateLimitKey(user.userId, 'USER_READ' as RateLimitKey),
+      getRateLimit('USER_READ' as RateLimitKey).max,
+      getRateLimit('USER_READ' as RateLimitKey).window
+    )
+
+    if (!rateLimit.allowed) {
+      throw new Error(
+        `Rate limit exceeded. Try again in ${rateLimit.resetSeconds} seconds.`
+      )
+    }
+
+    const supabase = await createServerSupabaseAnonClient()
     const { data, error } = await supabase
       .from('users')
       .select('*')
       .eq('id', userId)
       .single()
 
-    if (error) {
-      serverLog('warn', 'getUserById', `User not found: ${userId}`)
-      return null
-    }
+    if (error) throw error
 
     return data as User
   } catch (error) {
-    handleDatabaseError('getUserById', error, 'fetch')
-    return null
+    console.error('[getUserById] Error:', error)
+    throw error
   }
 }
 
 /**
  * Update user role and status
+ * ✅ Auth check: Admin only
+ * ✅ Rate limiting: 100/hour (write operation)
+ * ✅ Input validation: Zod schema + UUID
  */
 export async function updateUser(
   userId: string,
-  data: z.infer<typeof UpdateUserSchema>
-): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createServerSupabaseClient()
-
+  userData: z.infer<typeof UpdateUserSchema>
+): Promise<void> {
   try {
-    // Validate input
-    const validated = UpdateUserSchema.parse(data)
+    // Auth check
+    const user = await requireAdmin()
+
+    // Input validation
+    if (!isValidUuid(userId)) {
+      throw new Error('Invalid user ID format')
+    }
+    const validated = UpdateUserSchema.parse(userData)
+
+    // Rate limiting
+    const rateLimit = checkRateLimit(
+      createRateLimitKey(user.userId, 'USER_UPDATE' as RateLimitKey),
+      getRateLimit('USER_UPDATE' as RateLimitKey).max,
+      getRateLimit('USER_UPDATE' as RateLimitKey).window
+    )
+
+    if (!rateLimit.allowed) {
+      throw new Error(
+        `Rate limit exceeded. Try again in ${rateLimit.resetSeconds} seconds.`
+      )
+    }
 
     // Update user metadata (role) and status
+    const supabase = await createServerSupabaseAnonClient()
     const { error } = await supabase
       .from('users')
       .update({
@@ -127,37 +213,56 @@ export async function updateUser(
       })
       .eq('id', userId)
 
-    if (error) {
-      serverLog('error', 'updateUser', `User update failed for ${userId}`, { error: error.message })
-      return { success: false, error: 'Failed to update user' }
-    }
+    if (error) throw error
 
-    // Log audit trail
-    await logUserAction(userId, 'user_role_change', undefined, { role: validated.role, status: validated.status })
+    // Audit log
+    await logUserAction(user.userId, 'user_role_change', 'user', userId, {
+      role: validated.role,
+      status: validated.status,
+    })
 
     revalidatePath('/admin/users')
-    return { success: true }
   } catch (error) {
-    const message = error instanceof z.ZodError ? 'Invalid data provided' : 'Failed to update user'
-    serverLog('error', 'updateUser', message, { error })
-    return { success: false, error: message }
+    console.error('[updateUser] Error:', error)
+    throw error
   }
 }
 
 /**
  * Suspend user account
+ * ✅ Auth check: Admin only
+ * ✅ Rate limiting: 100/hour (write operation)
+ * ✅ Input validation: Zod schema + UUID
  */
 export async function suspendUser(
   userId: string,
-  data: z.infer<typeof SuspendUserSchema>
-): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createServerSupabaseClient()
-
+  suspendData: z.infer<typeof SuspendUserSchema>
+): Promise<void> {
   try {
-    // Validate input
-    const validated = SuspendUserSchema.parse(data)
+    // Auth check
+    const user = await requireAdmin()
+
+    // Input validation
+    if (!isValidUuid(userId)) {
+      throw new Error('Invalid user ID format')
+    }
+    const validated = SuspendUserSchema.parse(suspendData)
+
+    // Rate limiting
+    const rateLimit = checkRateLimit(
+      createRateLimitKey(user.userId, 'USER_UPDATE' as RateLimitKey),
+      getRateLimit('USER_UPDATE' as RateLimitKey).max,
+      getRateLimit('USER_UPDATE' as RateLimitKey).window
+    )
+
+    if (!rateLimit.allowed) {
+      throw new Error(
+        `Rate limit exceeded. Try again in ${rateLimit.resetSeconds} seconds.`
+      )
+    }
 
     // Update user status and add suspension reason
+    const supabase = await createServerSupabaseAnonClient()
     const { error } = await supabase
       .from('users')
       .update({
@@ -169,30 +274,50 @@ export async function suspendUser(
       })
       .eq('id', userId)
 
-    if (error) {
-      serverLog('error', 'suspendUser', `User suspension failed for ${userId}`, { error: error.message })
-      return { success: false, error: 'Failed to suspend user' }
-    }
+    if (error) throw error
 
-    // Log audit trail
-    await logUserAction(userId, 'user_suspend', validated.reason)
+    // Audit log
+    await logUserAction(user.userId, 'user_suspend', 'user', userId, {
+      reason: validated.reason,
+    })
 
     revalidatePath('/admin/users')
-    return { success: true }
   } catch (error) {
-    const message = error instanceof z.ZodError ? 'Invalid data provided' : 'Failed to suspend user'
-    serverLog('error', 'suspendUser', message, { error })
-    return { success: false, error: message }
+    console.error('[suspendUser] Error:', error)
+    throw error
   }
 }
 
 /**
  * Unsuspend user account
+ * ✅ Auth check: Admin only
+ * ✅ Rate limiting: 100/hour (write operation)
+ * ✅ Input validation: UUID
  */
-export async function unsuspendUser(userId: string): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createServerSupabaseClient()
-
+export async function unsuspendUser(userId: string): Promise<void> {
   try {
+    // Auth check
+    const user = await requireAdmin()
+
+    // Input validation
+    if (!isValidUuid(userId)) {
+      throw new Error('Invalid user ID format')
+    }
+
+    // Rate limiting
+    const rateLimit = checkRateLimit(
+      createRateLimitKey(user.userId, 'USER_UPDATE' as RateLimitKey),
+      getRateLimit('USER_UPDATE' as RateLimitKey).max,
+      getRateLimit('USER_UPDATE' as RateLimitKey).window
+    )
+
+    if (!rateLimit.allowed) {
+      throw new Error(
+        `Rate limit exceeded. Try again in ${rateLimit.resetSeconds} seconds.`
+      )
+    }
+
+    const supabase = await createServerSupabaseAnonClient()
     const { error } = await supabase
       .from('users')
       .update({
@@ -203,194 +328,281 @@ export async function unsuspendUser(userId: string): Promise<{ success: boolean;
       })
       .eq('id', userId)
 
-    if (error) {
-      serverLog('error', 'unsuspendUser', `User unsuspension failed for ${userId}`, { error: error.message })
-      return { success: false, error: 'Failed to unsuspend user' }
-    }
+    if (error) throw error
 
-    // Log audit trail
-    await logUserAction(userId, 'user_unsuspend')
+    // Audit log
+    await logUserAction(user.userId, 'user_unsuspend', 'user', userId)
 
     revalidatePath('/admin/users')
-    return { success: true }
   } catch (error) {
-    serverLog('error', 'unsuspendUser', 'Unexpected error unsuspending user', { error })
-    return { success: false, error: 'Failed to unsuspend user' }
+    console.error('[unsuspendUser] Error:', error)
+    throw error
   }
 }
 
 /**
  * Delete user account
+ * ✅ Auth check: Admin only
+ * ✅ Rate limiting: 50/hour (dangerous operation)
+ * ✅ Input validation: UUID
  */
-export async function deleteUser(userId: string): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createServerSupabaseClient()
-
+export async function deleteUser(userId: string): Promise<void> {
   try {
+    // Auth check
+    const user = await requireAdmin()
+
+    // Input validation
+    if (!isValidUuid(userId)) {
+      throw new Error('Invalid user ID format')
+    }
+
+    // Rate limiting
+    const rateLimit = checkRateLimit(
+      createRateLimitKey(user.userId, 'USER_DELETE' as RateLimitKey),
+      getRateLimit('USER_DELETE' as RateLimitKey).max,
+      getRateLimit('USER_DELETE' as RateLimitKey).window
+    )
+
+    if (!rateLimit.allowed) {
+      throw new Error(
+        `Rate limit exceeded. Try again in ${rateLimit.resetSeconds} seconds.`
+      )
+    }
+
+    const supabase = await createServerSupabaseAnonClient()
     const { error } = await supabase
       .from('users')
       .delete()
       .eq('id', userId)
 
-    if (error) {
-      serverLog('error', 'deleteUser', `User deletion failed for ${userId}`, { error: error.message })
-      return { success: false, error: 'Failed to delete user' }
-    }
+    if (error) throw error
 
-    // Log audit trail
-    await logUserAction(userId, 'user_delete')
+    // Audit log
+    await logUserAction(user.userId, 'user_delete', 'user', userId)
 
     revalidatePath('/admin/users')
-    return { success: true }
   } catch (error) {
-    serverLog('error', 'deleteUser', 'Unexpected error deleting user', { error })
-    return { success: false, error: 'Failed to delete user' }
+    console.error('[deleteUser] Error:', error)
+    throw error
   }
 }
 
 /**
  * Get pending verification users
+ * ✅ Auth check: Any authenticated user
+ * ✅ Rate limiting: 1000/hour (read operation)
+ * ✅ Input validation: Pagination
  */
 export async function getPendingUsers(
   page = 1,
   pageSize = 20
 ): Promise<UserListResponse> {
-  const supabase = await createServerSupabaseClient()
-
   try {
-    const from = (page - 1) * pageSize
+    // Auth check
+    const user = await getCurrentUser()
 
+    // Input validation
+    const validatedPagination = PaginationSchema.parse({ page, pageSize })
+
+    // Rate limiting
+    const rateLimit = checkRateLimit(
+      createRateLimitKey(user.userId, 'USER_LIST' as RateLimitKey),
+      getRateLimit('USER_LIST' as RateLimitKey).max,
+      getRateLimit('USER_LIST' as RateLimitKey).window
+    )
+
+    if (!rateLimit.allowed) {
+      throw new Error(
+        `Rate limit exceeded. Try again in ${rateLimit.resetSeconds} seconds.`
+      )
+    }
+
+    const from = (validatedPagination.page - 1) * validatedPagination.pageSize
+
+    const supabase = await createServerSupabaseAnonClient()
     const { data, count, error } = await supabase
       .from('users')
       .select('*', { count: 'exact' })
       .eq('status', 'pending')
-      .range(from, from + pageSize - 1)
+      .range(from, from + validatedPagination.pageSize - 1)
       .order('created_at', { ascending: false })
 
-    if (error) {
-      serverLog('error', 'getPendingUsers', 'Database query failed', { error: error.message })
-      return { users: [], total: 0, page, pageSize }
-    }
+    if (error) throw error
 
     return {
       users: (data || []) as User[],
       total: count || 0,
-      page,
-      pageSize,
+      page: validatedPagination.page,
+      pageSize: validatedPagination.pageSize,
     }
   } catch (error) {
-    serverLog('error', 'getPendingUsers', 'Failed to fetch pending users', { error })
-    return { users: [], total: 0, page, pageSize }
+    console.error('[getPendingUsers] Error:', error)
+    throw error
   }
 }
 
 /**
  * Get suspended users
+ * ✅ Auth check: Any authenticated user
+ * ✅ Rate limiting: 1000/hour (read operation)
+ * ✅ Input validation: Pagination
  */
 export async function getSuspendedUsers(
   page = 1,
   pageSize = 20
 ): Promise<UserListResponse> {
-  const supabase = await createServerSupabaseClient()
-
   try {
-    const from = (page - 1) * pageSize
+    // Auth check
+    const user = await getCurrentUser()
 
+    // Input validation
+    const validatedPagination = PaginationSchema.parse({ page, pageSize })
+
+    // Rate limiting
+    const rateLimit = checkRateLimit(
+      createRateLimitKey(user.userId, 'USER_LIST' as RateLimitKey),
+      getRateLimit('USER_LIST' as RateLimitKey).max,
+      getRateLimit('USER_LIST' as RateLimitKey).window
+    )
+
+    if (!rateLimit.allowed) {
+      throw new Error(
+        `Rate limit exceeded. Try again in ${rateLimit.resetSeconds} seconds.`
+      )
+    }
+
+    const from = (validatedPagination.page - 1) * validatedPagination.pageSize
+
+    const supabase = await createServerSupabaseAnonClient()
     const { data, count, error } = await supabase
       .from('users')
       .select('*', { count: 'exact' })
       .eq('status', 'suspended')
-      .range(from, from + pageSize - 1)
+      .range(from, from + validatedPagination.pageSize - 1)
       .order('created_at', { ascending: false })
 
-    if (error) {
-      serverLog('error', 'getSuspendedUsers', 'Database query failed', { error: error.message })
-      return { users: [], total: 0, page, pageSize }
-    }
+    if (error) throw error
 
     return {
       users: (data || []) as User[],
       total: count || 0,
-      page,
-      pageSize,
+      page: validatedPagination.page,
+      pageSize: validatedPagination.pageSize,
     }
   } catch (error) {
-    serverLog('error', 'getSuspendedUsers', 'Failed to fetch suspended users', { error })
-    return { users: [], total: 0, page, pageSize }
+    console.error('[getSuspendedUsers] Error:', error)
+    throw error
   }
 }
 
 /**
  * Bulk update user roles
+ * ✅ Auth check: Admin only
+ * ✅ Rate limiting: 10/hour (very restrictive - bulk operation)
+ * ✅ Input validation: Zod schema with UUID array
  */
 export async function bulkUpdateUserRoles(
   userIds: string[],
   role: 'admin' | 'analyst' | 'user'
-): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createServerSupabaseClient()
-
+): Promise<void> {
   try {
+    // Auth check
+    const user = await requireAdmin()
+
+    // Input validation
+    const validated = BulkRoleSchema.parse({ userIds, role })
+
+    // Rate limiting
+    const rateLimit = checkRateLimit(
+      createRateLimitKey(user.userId, 'BULK_UPDATE' as RateLimitKey),
+      getRateLimit('BULK_UPDATE' as RateLimitKey).max,
+      getRateLimit('BULK_UPDATE' as RateLimitKey).window
+    )
+
+    if (!rateLimit.allowed) {
+      throw new Error(
+        `Rate limit exceeded. Try again in ${rateLimit.resetSeconds} seconds.`
+      )
+    }
+
+    const supabase = await createServerSupabaseAnonClient()
     const { error } = await supabase
       .from('users')
       .update({
         user_metadata: {
-          role,
+          role: validated.role,
         },
       })
-      .in('id', userIds)
+      .in('id', validated.userIds)
 
-    if (error) {
-      serverLog('error', 'bulkUpdateUserRoles', `Bulk role update failed for ${userIds.length} users`, { error: error.message })
-      return { success: false, error: 'Failed to update users' }
-    }
+    if (error) throw error
 
-    // Log audit trail for each user
-    for (const userId of userIds) {
-      await logUserAction(userId, 'user_role_change', `Bulk update to ${role}`, { role })
-    }
+    // Audit log for bulk operation
+    await logUserAction(user.userId, 'bulk_update_user_roles', 'user', undefined, {
+      count: validated.userIds.length,
+      role: validated.role,
+    })
 
     revalidatePath('/admin/users')
-    return { success: true }
   } catch (error) {
-    serverLog('error', 'bulkUpdateUserRoles', 'Unexpected error in bulk update', { error })
-    return { success: false, error: 'Failed to update users' }
+    console.error('[bulkUpdateUserRoles] Error:', error)
+    throw error
   }
 }
 
 /**
  * Bulk suspend users
+ * ✅ Auth check: Admin only
+ * ✅ Rate limiting: 10/hour (very restrictive - bulk operation)
+ * ✅ Input validation: Zod schema with UUID array
  */
 export async function bulkSuspendUsers(
   userIds: string[],
   reason: string
-): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createServerSupabaseClient()
-
+): Promise<void> {
   try {
+    // Auth check
+    const user = await requireAdmin()
+
+    // Input validation
+    const validated = BulkSuspendSchema.parse({ userIds, reason })
+
+    // Rate limiting
+    const rateLimit = checkRateLimit(
+      createRateLimitKey(user.userId, 'BULK_UPDATE' as RateLimitKey),
+      getRateLimit('BULK_UPDATE' as RateLimitKey).max,
+      getRateLimit('BULK_UPDATE' as RateLimitKey).window
+    )
+
+    if (!rateLimit.allowed) {
+      throw new Error(
+        `Rate limit exceeded. Try again in ${rateLimit.resetSeconds} seconds.`
+      )
+    }
+
+    const supabase = await createServerSupabaseAnonClient()
     const { error } = await supabase
       .from('users')
       .update({
         status: 'suspended',
         metadata: {
           suspended_at: new Date().toISOString(),
-          suspension_reason: reason,
+          suspension_reason: validated.reason,
         },
       })
-      .in('id', userIds)
+      .in('id', validated.userIds)
 
-    if (error) {
-      serverLog('error', 'bulkSuspendUsers', `Bulk suspend failed for ${userIds.length} users`, { error: error.message })
-      return { success: false, error: 'Failed to suspend users' }
-    }
+    if (error) throw error
 
-    // Log audit trail for each user
-    for (const userId of userIds) {
-      await logUserAction(userId, 'user_suspend', reason)
-    }
+    // Audit log for bulk operation
+    await logUserAction(user.userId, 'bulk_suspend_users', 'user', undefined, {
+      count: validated.userIds.length,
+      reason: validated.reason,
+    })
 
     revalidatePath('/admin/users')
-    return { success: true }
   } catch (error) {
-    serverLog('error', 'bulkSuspendUsers', 'Unexpected error in bulk suspend', { error })
-    return { success: false, error: 'Failed to suspend users' }
+    console.error('[bulkSuspendUsers] Error:', error)
+    throw error
   }
 }

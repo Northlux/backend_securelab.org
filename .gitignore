@@ -40,9 +40,30 @@ yarn-error.log*
 # OS
 Thumbs.db
 
+# DOCUMENTATION - Local only, never publish to Vercel
+# Internal documentation stays local:
+# - Database setup guides
+# - Phase documentation
+# - Architecture notes
+# - Implementation notes
+# Keep these files off production servers
+/documentation
+/documentation/
+
+# TEST RESULTS & LOGS - Local only, never commit
+# Keep test artifacts and performance data local:
+# - Test output files
+# - Coverage reports (but coverage/ already ignored)
+# - Performance measurements
+# - Screenshot/video from Playwright tests
+test-results/
+.playwright-mcp/
+*.test.log
+performance-results/
+
 # LOCAL_ONLY - NEVER commit this folder to GitHub
 # Use this for:
-# - Local development scripts
+# - Local development scripts (in test_scripts/)
 # - Handoff documentation for external systems
 # - Sensitive local configuration
 # - Testing artifacts

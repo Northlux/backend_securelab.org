@@ -1,12 +1,26 @@
 'use server'
 
-import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createServerSupabaseAnonClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { serverLog, handleDatabaseError } from '@/lib/utils/logger'
-import { logSubscriptionAction } from '@/lib/utils/audit-logger'
+import { getCurrentUser, requireAdmin } from '@/lib/auth/server-auth'
+import { checkRateLimit } from '@/lib/utils/rate-limiter'
+import { logUserAction } from '@/lib/utils/audit-logger'
+import { isValidUuid, sanitizeStringArray } from '@/lib/utils/sanitize'
+import { createRateLimitKey, getRateLimit, type RateLimitKey } from '@/lib/utils/rate-limits'
 
 // Validation schemas
+const PaginationSchema = z.object({
+  page: z.number().int().min(1).default(1),
+  pageSize: z.number().int().min(1).max(100).default(20),
+})
+
+const FilterSchema = z.object({
+  status: z.string().optional(),
+  tier_id: z.string().uuid().optional(),
+  search: z.string().optional(),
+})
+
 const CreateTierSchema = z.object({
   name: z.string().min(2).max(50),
   price_monthly: z.number().min(0).max(10000),
@@ -22,6 +36,22 @@ const UpdateTierSchema = CreateTierSchema.partial().required({ name: true })
 const CancelSubscriptionSchema = z.object({
   reason: z.string().min(5).max(500),
   refund_amount: z.number().min(0).optional(),
+})
+
+const RefundSchema = z.object({
+  amount: z.number().min(0),
+  reason: z.string().min(5).max(500),
+})
+
+const UpgradeRequestActionSchema = z.object({
+  notes: z.string().max(500).optional(),
+  reason: z.string().max(500).optional(),
+})
+
+const BillingHistoryFilterSchema = z.object({
+  status: z.string().optional(),
+  date_from: z.string().optional(),
+  date_to: z.string().optional(),
 })
 
 export interface SubscriptionTier {
@@ -61,6 +91,9 @@ export interface SubscriptionListResponse {
 
 /**
  * Get paginated list of subscriptions with filtering
+ * ✅ Auth check: Any authenticated user
+ * ✅ Rate limiting: 1000/hour (read operation)
+ * ✅ Input validation: Pagination and filters
  */
 export async function getSubscriptions(
   page = 1,
@@ -71,31 +104,46 @@ export async function getSubscriptions(
     search?: string
   }
 ): Promise<SubscriptionListResponse> {
-  const supabase = await createServerSupabaseClient()
-
   try {
-    const from = (page - 1) * pageSize
+    // Auth check
+    const user = await getCurrentUser()
 
-    let query = supabase
+    // Input validation
+    const validatedPagination = PaginationSchema.parse({ page, pageSize })
+    const validatedFilters = FilterSchema.parse(filters || {})
+
+    // Rate limiting
+    const rateLimit = checkRateLimit(
+      createRateLimitKey(user.userId, 'SUBSCRIPTION_LIST' as RateLimitKey),
+      getRateLimit('SUBSCRIPTION_LIST' as RateLimitKey).max,
+      getRateLimit('SUBSCRIPTION_LIST' as RateLimitKey).window
+    )
+
+    if (!rateLimit.allowed) {
+      throw new Error(
+        `Rate limit exceeded. Try again in ${rateLimit.resetSeconds} seconds.`
+      )
+    }
+
+    const from = (validatedPagination.page - 1) * validatedPagination.pageSize
+
+    let query = (await createServerSupabaseAnonClient())
       .from('subscriptions')
       .select('*, users(email), subscription_tiers(name)', { count: 'exact' })
-      .range(from, from + pageSize - 1)
+      .range(from, from + validatedPagination.pageSize - 1)
       .order('created_at', { ascending: false })
 
     // Apply filters
-    if (filters?.status) {
-      query = query.eq('status', filters.status)
+    if (validatedFilters.status) {
+      query = query.eq('status', validatedFilters.status)
     }
-    if (filters?.tier_id) {
-      query = query.eq('tier_id', filters.tier_id)
+    if (validatedFilters.tier_id) {
+      query = query.eq('tier_id', validatedFilters.tier_id)
     }
 
     const { data, count, error } = await query
 
-    if (error) {
-      serverLog('error', 'getSubscriptions', 'Database query failed', { error: error.message })
-      return { subscriptions: [], total: 0, page, pageSize }
-    }
+    if (error) throw error
 
     const subscriptions = (data || []).map((sub: any) => ({
       ...sub,
@@ -106,32 +154,52 @@ export async function getSubscriptions(
     return {
       subscriptions,
       total: count || 0,
-      page,
-      pageSize,
+      page: validatedPagination.page,
+      pageSize: validatedPagination.pageSize,
     }
   } catch (error) {
-    serverLog('error', 'getSubscriptions', 'Failed to fetch subscriptions', { error })
-    return { subscriptions: [], total: 0, page, pageSize }
+    console.error('[getSubscriptions] Error:', error)
+    throw error
   }
 }
 
 /**
  * Get single subscription by ID
+ * ✅ Auth check: Any authenticated user
+ * ✅ Rate limiting: 1000/hour (read operation)
+ * ✅ Input validation: UUID validation
  */
 export async function getSubscriptionById(subscriptionId: string): Promise<Subscription | null> {
-  const supabase = await createServerSupabaseClient()
-
   try {
+    // Auth check
+    const user = await getCurrentUser()
+
+    // Input validation
+    if (!isValidUuid(subscriptionId)) {
+      throw new Error('Invalid subscription ID format')
+    }
+
+    // Rate limiting
+    const rateLimit = checkRateLimit(
+      createRateLimitKey(user.userId, 'SUBSCRIPTION_LIST' as RateLimitKey),
+      getRateLimit('SUBSCRIPTION_LIST' as RateLimitKey).max,
+      getRateLimit('SUBSCRIPTION_LIST' as RateLimitKey).window
+    )
+
+    if (!rateLimit.allowed) {
+      throw new Error(
+        `Rate limit exceeded. Try again in ${rateLimit.resetSeconds} seconds.`
+      )
+    }
+
+    const supabase = await createServerSupabaseAnonClient()
     const { data, error } = await supabase
       .from('subscriptions')
       .select('*, users(email, user_metadata), subscription_tiers(name, price_monthly, price_annual, features)')
       .eq('id', subscriptionId)
       .single()
 
-    if (error) {
-      serverLog('warn', 'getSubscriptionById', `Subscription not found: ${subscriptionId}`)
-      return null
-    }
+    if (error) throw error
 
     return {
       ...data,
@@ -139,18 +207,35 @@ export async function getSubscriptionById(subscriptionId: string): Promise<Subsc
       tier_name: data.subscription_tiers?.name,
     } as Subscription
   } catch (error) {
-    handleDatabaseError('getSubscriptionById', error, 'fetch')
-    return null
+    console.error('[getSubscriptionById] Error:', error)
+    throw error
   }
 }
 
 /**
  * Get all subscription tiers
+ * ✅ Auth check: Any authenticated user
+ * ✅ Rate limiting: 1000/hour (read operation)
  */
 export async function getSubscriptionTiers(): Promise<SubscriptionTier[]> {
-  const supabase = await createServerSupabaseClient()
-
   try {
+    // Auth check
+    const user = await getCurrentUser()
+
+    // Rate limiting
+    const rateLimit = checkRateLimit(
+      createRateLimitKey(user.userId, 'SUBSCRIPTION_TIERS' as RateLimitKey),
+      getRateLimit('SUBSCRIPTION_TIERS' as RateLimitKey).max,
+      getRateLimit('SUBSCRIPTION_TIERS' as RateLimitKey).window
+    )
+
+    if (!rateLimit.allowed) {
+      throw new Error(
+        `Rate limit exceeded. Try again in ${rateLimit.resetSeconds} seconds.`
+      )
+    }
+
+    const supabase = await createServerSupabaseAnonClient()
     const { data, error } = await supabase
       .from('subscription_tiers')
       .select(`
@@ -160,124 +245,214 @@ export async function getSubscriptionTiers(): Promise<SubscriptionTier[]> {
       .eq('is_active', true)
       .order('display_order', { ascending: true })
 
-    if (error) {
-      serverLog('error', 'getSubscriptionTiers', 'Database query failed', { error: error.message })
-      return []
-    }
+    if (error) throw error
 
     return (data || []).map((tier: any) => ({
       ...tier,
       user_count: tier.subscriptions?.length || 0,
     })) as SubscriptionTier[]
   } catch (error) {
-    serverLog('error', 'getSubscriptionTiers', 'Failed to fetch tiers', { error })
-    return []
+    console.error('[getSubscriptionTiers] Error:', error)
+    throw error
   }
 }
 
 /**
  * Create new subscription tier
+ * ✅ Auth check: Admin only
+ * ✅ Rate limiting: 100/hour (write operation)
+ * ✅ Input validation: Zod schema
  */
 export async function createSubscriptionTier(
-  data: z.infer<typeof CreateTierSchema>
-): Promise<{ success: boolean; tier?: SubscriptionTier; error?: string }> {
-  const supabase = await createServerSupabaseClient()
-
+  tierData: z.infer<typeof CreateTierSchema>
+): Promise<SubscriptionTier> {
   try {
-    const validated = CreateTierSchema.parse(data)
+    // Auth check
+    const user = await requireAdmin()
 
+    // Input validation
+    const validated = CreateTierSchema.parse(tierData)
+
+    // Rate limiting
+    const rateLimit = checkRateLimit(
+      createRateLimitKey(user.userId, 'SUBSCRIPTION_CREATE' as RateLimitKey),
+      getRateLimit('SUBSCRIPTION_CREATE' as RateLimitKey).max,
+      getRateLimit('SUBSCRIPTION_CREATE' as RateLimitKey).window
+    )
+
+    if (!rateLimit.allowed) {
+      throw new Error(
+        `Rate limit exceeded. Try again in ${rateLimit.resetSeconds} seconds.`
+      )
+    }
+
+    // Sanitize features array
+    const sanitizedFeatures = sanitizeStringArray(validated.features)
+
+    const supabase = await createServerSupabaseAnonClient()
     const { data: tier, error } = await supabase
       .from('subscription_tiers')
-      .insert([validated])
+      .insert([{ ...validated, features: sanitizedFeatures }])
       .select()
       .single()
 
-    if (error) {
-      serverLog('error', 'createSubscriptionTier', 'Tier creation failed', { error: error.message })
-      return { success: false, error: 'Failed to create tier' }
-    }
+    if (error) throw error
+
+    // Audit log
+    await logUserAction(user.userId, 'subscription_tier_create', 'subscription_tier', tier?.id, {
+      name: validated.name,
+      price: validated.price_monthly,
+    })
 
     revalidatePath('/admin/subscriptions/tiers')
-    return { success: true, tier: tier as SubscriptionTier }
+    return tier as SubscriptionTier
   } catch (error) {
-    const message = error instanceof z.ZodError ? 'Invalid data provided' : 'Failed to create tier'
-    serverLog('error', 'createSubscriptionTier', message, { error })
-    return { success: false, error: message }
+    console.error('[createSubscriptionTier] Error:', error)
+    throw error
   }
 }
 
 /**
  * Update subscription tier
+ * ✅ Auth check: Admin only
+ * ✅ Rate limiting: 100/hour (write operation)
+ * ✅ Input validation: Zod schema + UUID
  */
 export async function updateSubscriptionTier(
   tierId: string,
-  data: z.infer<typeof UpdateTierSchema>
-): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createServerSupabaseClient()
-
+  tierData: z.infer<typeof UpdateTierSchema>
+): Promise<void> {
   try {
-    const validated = UpdateTierSchema.parse(data)
+    // Auth check
+    const user = await requireAdmin()
 
-    const { error } = await supabase
-      .from('subscription_tiers')
-      .update(validated)
-      .eq('id', tierId)
+    // Input validation
+    if (!isValidUuid(tierId)) {
+      throw new Error('Invalid tier ID format')
+    }
+    const validated = UpdateTierSchema.parse(tierData)
 
-    if (error) {
-      serverLog('error', 'updateSubscriptionTier', `Tier update failed for ${tierId}`, { error: error.message })
-      return { success: false, error: 'Failed to update tier' }
+    // Rate limiting
+    const rateLimit = checkRateLimit(
+      createRateLimitKey(user.userId, 'SUBSCRIPTION_UPDATE' as RateLimitKey),
+      getRateLimit('SUBSCRIPTION_UPDATE' as RateLimitKey).max,
+      getRateLimit('SUBSCRIPTION_UPDATE' as RateLimitKey).window
+    )
+
+    if (!rateLimit.allowed) {
+      throw new Error(
+        `Rate limit exceeded. Try again in ${rateLimit.resetSeconds} seconds.`
+      )
     }
 
+    // Sanitize features if provided
+    const sanitizedData = {
+      ...validated,
+      features: validated.features ? sanitizeStringArray(validated.features) : undefined,
+    }
+
+    const supabase = await createServerSupabaseAnonClient()
+    const { error } = await supabase
+      .from('subscription_tiers')
+      .update(sanitizedData)
+      .eq('id', tierId)
+
+    if (error) throw error
+
+    // Audit log
+    await logUserAction(user.userId, 'subscription_tier_update', 'subscription_tier', tierId, {
+      name: validated.name,
+    })
+
     revalidatePath('/admin/subscriptions/tiers')
-    return { success: true }
   } catch (error) {
-    const message = error instanceof z.ZodError ? 'Invalid data provided' : 'Failed to update tier'
-    serverLog('error', 'updateSubscriptionTier', message, { error })
-    return { success: false, error: message }
+    console.error('[updateSubscriptionTier] Error:', error)
+    throw error
   }
 }
 
 /**
- * Delete subscription tier
+ * Delete subscription tier (soft delete)
+ * ✅ Auth check: Admin only
+ * ✅ Rate limiting: 50/hour (dangerous operation)
+ * ✅ Input validation: UUID
  */
-export async function deleteSubscriptionTier(tierId: string): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createServerSupabaseClient()
-
+export async function deleteSubscriptionTier(tierId: string): Promise<void> {
   try {
+    // Auth check
+    const user = await requireAdmin()
+
+    // Input validation
+    if (!isValidUuid(tierId)) {
+      throw new Error('Invalid tier ID format')
+    }
+
+    // Rate limiting
+    const rateLimit = checkRateLimit(
+      createRateLimitKey(user.userId, 'SUBSCRIPTION_DELETE' as RateLimitKey),
+      getRateLimit('SUBSCRIPTION_DELETE' as RateLimitKey).max,
+      getRateLimit('SUBSCRIPTION_DELETE' as RateLimitKey).window
+    )
+
+    if (!rateLimit.allowed) {
+      throw new Error(
+        `Rate limit exceeded. Try again in ${rateLimit.resetSeconds} seconds.`
+      )
+    }
+
     // Soft delete by setting is_active = false
+    const supabase = await createServerSupabaseAnonClient()
     const { error } = await supabase
       .from('subscription_tiers')
       .update({ is_active: false })
       .eq('id', tierId)
 
-    if (error) {
-      serverLog('error', 'deleteSubscriptionTier', `Tier deletion failed for ${tierId}`, { error: error.message })
-      return { success: false, error: 'Failed to delete tier' }
-    }
+    if (error) throw error
 
-    // Log audit trail
-    await logSubscriptionAction(tierId, 'subscription_upgrade_reject', 'Tier deleted')
+    // Audit log
+    await logUserAction(user.userId, 'subscription_tier_delete', 'subscription_tier', tierId)
 
     revalidatePath('/admin/subscriptions/tiers')
-    return { success: true }
   } catch (error) {
-    serverLog('error', 'deleteSubscriptionTier', 'Unexpected error deleting tier', { error })
-    return { success: false, error: 'Failed to delete tier' }
+    console.error('[deleteSubscriptionTier] Error:', error)
+    throw error
   }
 }
 
 /**
  * Cancel subscription
+ * ✅ Auth check: Admin only
+ * ✅ Rate limiting: 100/hour (write operation)
+ * ✅ Input validation: Zod schema + UUID
  */
 export async function cancelSubscription(
   subscriptionId: string,
-  data: z.infer<typeof CancelSubscriptionSchema>
-): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createServerSupabaseClient()
-
+  cancelData: z.infer<typeof CancelSubscriptionSchema>
+): Promise<void> {
   try {
-    const validated = CancelSubscriptionSchema.parse(data)
+    // Auth check
+    const user = await requireAdmin()
 
+    // Input validation
+    if (!isValidUuid(subscriptionId)) {
+      throw new Error('Invalid subscription ID format')
+    }
+    const validated = CancelSubscriptionSchema.parse(cancelData)
+
+    // Rate limiting
+    const rateLimit = checkRateLimit(
+      createRateLimitKey(user.userId, 'SUBSCRIPTION_UPDATE' as RateLimitKey),
+      getRateLimit('SUBSCRIPTION_UPDATE' as RateLimitKey).max,
+      getRateLimit('SUBSCRIPTION_UPDATE' as RateLimitKey).window
+    )
+
+    if (!rateLimit.allowed) {
+      throw new Error(
+        `Rate limit exceeded. Try again in ${rateLimit.resetSeconds} seconds.`
+      )
+    }
+
+    const supabase = await createServerSupabaseAnonClient()
     const { error } = await supabase
       .from('subscriptions')
       .update({
@@ -287,66 +462,88 @@ export async function cancelSubscription(
       })
       .eq('id', subscriptionId)
 
-    if (error) {
-      serverLog('error', 'cancelSubscription', `Subscription cancellation failed for ${subscriptionId}`, { error: error.message })
-      return { success: false, error: 'Failed to cancel subscription' }
-    }
+    if (error) throw error
 
-    // Log audit trail
-    await logSubscriptionAction(subscriptionId, 'subscription_cancel', validated.reason)
+    // Audit log
+    await logUserAction(user.userId, 'subscription_cancel', 'subscription', subscriptionId, {
+      reason: validated.reason,
+    })
 
     revalidatePath('/admin/subscriptions')
-    return { success: true }
   } catch (error) {
-    const message = error instanceof z.ZodError ? 'Invalid data provided' : 'Failed to cancel subscription'
-    serverLog('error', 'cancelSubscription', message, { error })
-    return { success: false, error: message }
+    console.error('[cancelSubscription] Error:', error)
+    throw error
   }
 }
 
 /**
  * Process refund for subscription
+ * ✅ Auth check: Admin only
+ * ✅ Rate limiting: 100/hour (write operation)
+ * ✅ Input validation: Zod schema + UUID
  */
 export async function refundSubscription(
   subscriptionId: string,
-  amount: number,
-  reason: string
-): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createServerSupabaseClient()
-
+  refundData: z.infer<typeof RefundSchema>
+): Promise<void> {
   try {
+    // Auth check
+    const user = await requireAdmin()
+
+    // Input validation
+    if (!isValidUuid(subscriptionId)) {
+      throw new Error('Invalid subscription ID format')
+    }
+    const validated = RefundSchema.parse(refundData)
+
+    // Rate limiting
+    const rateLimit = checkRateLimit(
+      createRateLimitKey(user.userId, 'SUBSCRIPTION_UPDATE' as RateLimitKey),
+      getRateLimit('SUBSCRIPTION_UPDATE' as RateLimitKey).max,
+      getRateLimit('SUBSCRIPTION_UPDATE' as RateLimitKey).window
+    )
+
+    if (!rateLimit.allowed) {
+      throw new Error(
+        `Rate limit exceeded. Try again in ${rateLimit.resetSeconds} seconds.`
+      )
+    }
+
     // Record refund in billing history
+    const supabase = await createServerSupabaseAnonClient()
     const { error } = await supabase
       .from('billing_history')
       .insert([
         {
           subscription_id: subscriptionId,
           type: 'refund',
-          amount: -Math.abs(amount), // Negative for refund
+          amount: -Math.abs(validated.amount), // Negative for refund
           status: 'completed',
-          notes: reason,
+          notes: validated.reason,
           created_at: new Date().toISOString(),
         },
       ])
 
-    if (error) {
-      serverLog('error', 'refundSubscription', `Refund processing failed for subscription ${subscriptionId}`, { error: error.message })
-      return { success: false, error: 'Failed to process refund' }
-    }
+    if (error) throw error
 
-    // Log audit trail
-    await logSubscriptionAction(subscriptionId, 'subscription_refund', reason, { amount })
+    // Audit log
+    await logUserAction(user.userId, 'subscription_refund', 'subscription', subscriptionId, {
+      amount: validated.amount,
+      reason: validated.reason,
+    })
 
     revalidatePath('/admin/subscriptions')
-    return { success: true }
   } catch (error) {
-    serverLog('error', 'refundSubscription', 'Unexpected error processing refund', { error })
-    return { success: false, error: 'Failed to process refund' }
+    console.error('[refundSubscription] Error:', error)
+    throw error
   }
 }
 
 /**
  * Get upgrade requests
+ * ✅ Auth check: Any authenticated user
+ * ✅ Rate limiting: 1000/hour (read operation)
+ * ✅ Input validation: Pagination and filters
  */
 export async function getUpgradeRequests(
   page = 1,
@@ -355,114 +552,180 @@ export async function getUpgradeRequests(
     status?: string
   }
 ): Promise<SubscriptionListResponse> {
-  const supabase = await createServerSupabaseClient()
-
   try {
-    const from = (page - 1) * pageSize
+    // Auth check
+    const user = await getCurrentUser()
 
-    let query = supabase
+    // Input validation
+    const validatedPagination = PaginationSchema.parse({ page, pageSize })
+    const validatedFilters = z.object({ status: z.string().optional() }).parse(filters || {})
+
+    // Rate limiting
+    const rateLimit = checkRateLimit(
+      createRateLimitKey(user.userId, 'SUBSCRIPTION_REQUESTS' as RateLimitKey),
+      getRateLimit('SUBSCRIPTION_REQUESTS' as RateLimitKey).max,
+      getRateLimit('SUBSCRIPTION_REQUESTS' as RateLimitKey).window
+    )
+
+    if (!rateLimit.allowed) {
+      throw new Error(
+        `Rate limit exceeded. Try again in ${rateLimit.resetSeconds} seconds.`
+      )
+    }
+
+    const from = (validatedPagination.page - 1) * validatedPagination.pageSize
+
+    let query = (await createServerSupabaseAnonClient())
       .from('upgrade_requests')
       .select('*, users(email), from_tier:subscription_tiers!from_tier_id(name), to_tier:subscription_tiers!to_tier_id(name)', {
         count: 'exact',
       })
-      .range(from, from + pageSize - 1)
+      .range(from, from + validatedPagination.pageSize - 1)
       .order('created_at', { ascending: false })
 
-    if (filters?.status) {
-      query = query.eq('status', filters.status)
+    if (validatedFilters.status) {
+      query = query.eq('status', validatedFilters.status)
     }
 
     const { data, count, error } = await query
 
-    if (error) {
-      serverLog('error', 'getUpgradeRequests', 'Database query failed', { error: error.message })
-      return { subscriptions: [], total: 0, page, pageSize }
-    }
+    if (error) throw error
 
     return {
       subscriptions: (data || []) as any,
       total: count || 0,
-      page,
-      pageSize,
+      page: validatedPagination.page,
+      pageSize: validatedPagination.pageSize,
     }
   } catch (error) {
-    serverLog('error', 'getUpgradeRequests', 'Failed to fetch upgrade requests', { error })
-    return { subscriptions: [], total: 0, page, pageSize }
+    console.error('[getUpgradeRequests] Error:', error)
+    throw error
   }
 }
 
 /**
  * Approve upgrade request
+ * ✅ Auth check: Admin only
+ * ✅ Rate limiting: 100/hour (write operation)
+ * ✅ Input validation: UUID + optional notes
  */
 export async function approveUpgradeRequest(
   requestId: string,
-  notes?: string
-): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createServerSupabaseClient()
-
+  actionData?: z.infer<typeof UpgradeRequestActionSchema>
+): Promise<void> {
   try {
+    // Auth check
+    const user = await requireAdmin()
+
+    // Input validation
+    if (!isValidUuid(requestId)) {
+      throw new Error('Invalid request ID format')
+    }
+    const validated = UpgradeRequestActionSchema.parse(actionData || {})
+
+    // Rate limiting
+    const rateLimit = checkRateLimit(
+      createRateLimitKey(user.userId, 'SUBSCRIPTION_UPDATE' as RateLimitKey),
+      getRateLimit('SUBSCRIPTION_UPDATE' as RateLimitKey).max,
+      getRateLimit('SUBSCRIPTION_UPDATE' as RateLimitKey).window
+    )
+
+    if (!rateLimit.allowed) {
+      throw new Error(
+        `Rate limit exceeded. Try again in ${rateLimit.resetSeconds} seconds.`
+      )
+    }
+
+    const supabase = await createServerSupabaseAnonClient()
     const { error } = await supabase
       .from('upgrade_requests')
       .update({
         status: 'approved',
         approved_at: new Date().toISOString(),
-        admin_notes: notes,
+        admin_notes: validated.notes,
       })
       .eq('id', requestId)
 
-    if (error) {
-      serverLog('error', 'approveUpgradeRequest', `Upgrade approval failed for request ${requestId}`, { error: error.message })
-      return { success: false, error: 'Failed to approve request' }
-    }
+    if (error) throw error
 
-    // Log audit trail
-    await logSubscriptionAction(requestId, 'subscription_upgrade_approve', notes)
+    // Audit log
+    await logUserAction(user.userId, 'subscription_upgrade_approve', 'upgrade_request', requestId, {
+      notes: validated.notes,
+    })
 
     revalidatePath('/admin/subscriptions/requests')
-    return { success: true }
   } catch (error) {
-    serverLog('error', 'approveUpgradeRequest', 'Unexpected error approving request', { error })
-    return { success: false, error: 'Failed to approve request' }
+    console.error('[approveUpgradeRequest] Error:', error)
+    throw error
   }
 }
 
 /**
  * Reject upgrade request
+ * ✅ Auth check: Admin only
+ * ✅ Rate limiting: 100/hour (write operation)
+ * ✅ Input validation: UUID + reason
  */
 export async function rejectUpgradeRequest(
   requestId: string,
-  reason: string
-): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createServerSupabaseClient()
-
+  rejectData: z.infer<typeof UpgradeRequestActionSchema>
+): Promise<void> {
   try {
+    // Auth check
+    const user = await requireAdmin()
+
+    // Input validation
+    if (!isValidUuid(requestId)) {
+      throw new Error('Invalid request ID format')
+    }
+    const validated = UpgradeRequestActionSchema.parse(rejectData)
+
+    if (!validated.reason) {
+      throw new Error('Rejection reason is required')
+    }
+
+    // Rate limiting
+    const rateLimit = checkRateLimit(
+      createRateLimitKey(user.userId, 'SUBSCRIPTION_UPDATE' as RateLimitKey),
+      getRateLimit('SUBSCRIPTION_UPDATE' as RateLimitKey).max,
+      getRateLimit('SUBSCRIPTION_UPDATE' as RateLimitKey).window
+    )
+
+    if (!rateLimit.allowed) {
+      throw new Error(
+        `Rate limit exceeded. Try again in ${rateLimit.resetSeconds} seconds.`
+      )
+    }
+
+    const supabase = await createServerSupabaseAnonClient()
     const { error } = await supabase
       .from('upgrade_requests')
       .update({
         status: 'rejected',
         rejected_at: new Date().toISOString(),
-        rejection_reason: reason,
+        rejection_reason: validated.reason,
       })
       .eq('id', requestId)
 
-    if (error) {
-      serverLog('error', 'rejectUpgradeRequest', `Upgrade rejection failed for request ${requestId}`, { error: error.message })
-      return { success: false, error: 'Failed to reject request' }
-    }
+    if (error) throw error
 
-    // Log audit trail
-    await logSubscriptionAction(requestId, 'subscription_upgrade_reject', reason)
+    // Audit log
+    await logUserAction(user.userId, 'subscription_upgrade_reject', 'upgrade_request', requestId, {
+      reason: validated.reason,
+    })
 
     revalidatePath('/admin/subscriptions/requests')
-    return { success: true }
   } catch (error) {
-    serverLog('error', 'rejectUpgradeRequest', 'Unexpected error rejecting request', { error })
-    return { success: false, error: 'Failed to reject request' }
+    console.error('[rejectUpgradeRequest] Error:', error)
+    throw error
   }
 }
 
 /**
  * Get billing history
+ * ✅ Auth check: Any authenticated user
+ * ✅ Rate limiting: 1000/hour (read operation)
+ * ✅ Input validation: Pagination and date filters
  */
 export async function getBillingHistory(
   page = 1,
@@ -473,42 +736,60 @@ export async function getBillingHistory(
     date_to?: string
   }
 ): Promise<SubscriptionListResponse> {
-  const supabase = await createServerSupabaseClient()
-
   try {
-    const from = (page - 1) * pageSize
+    // Auth check
+    const user = await getCurrentUser()
 
-    let query = supabase
+    // Input validation
+    const validatedPagination = z.object({
+      page: z.number().int().min(1).default(1),
+      pageSize: z.number().int().min(1).max(100).default(50),
+    }).parse({ page, pageSize })
+    const validatedFilters = BillingHistoryFilterSchema.parse(filters || {})
+
+    // Rate limiting
+    const rateLimit = checkRateLimit(
+      createRateLimitKey(user.userId, 'BILLING_HISTORY' as RateLimitKey),
+      getRateLimit('BILLING_HISTORY' as RateLimitKey).max,
+      getRateLimit('BILLING_HISTORY' as RateLimitKey).window
+    )
+
+    if (!rateLimit.allowed) {
+      throw new Error(
+        `Rate limit exceeded. Try again in ${rateLimit.resetSeconds} seconds.`
+      )
+    }
+
+    const from = (validatedPagination.page - 1) * validatedPagination.pageSize
+
+    let query = (await createServerSupabaseAnonClient())
       .from('billing_history')
       .select('*, subscriptions(users(email))', { count: 'exact' })
-      .range(from, from + pageSize - 1)
+      .range(from, from + validatedPagination.pageSize - 1)
       .order('created_at', { ascending: false })
 
-    if (filters?.status) {
-      query = query.eq('status', filters.status)
+    if (validatedFilters.status) {
+      query = query.eq('status', validatedFilters.status)
     }
-    if (filters?.date_from) {
-      query = query.gte('created_at', filters.date_from)
+    if (validatedFilters.date_from) {
+      query = query.gte('created_at', validatedFilters.date_from)
     }
-    if (filters?.date_to) {
-      query = query.lte('created_at', filters.date_to)
+    if (validatedFilters.date_to) {
+      query = query.lte('created_at', validatedFilters.date_to)
     }
 
     const { data, count, error } = await query
 
-    if (error) {
-      serverLog('error', 'getBillingHistory', 'Database query failed', { error: error.message })
-      return { subscriptions: [], total: 0, page, pageSize }
-    }
+    if (error) throw error
 
     return {
       subscriptions: (data || []) as any,
       total: count || 0,
-      page,
-      pageSize,
+      page: validatedPagination.page,
+      pageSize: validatedPagination.pageSize,
     }
   } catch (error) {
-    serverLog('error', 'getBillingHistory', 'Failed to fetch billing history', { error })
-    return { subscriptions: [], total: 0, page, pageSize }
+    console.error('[getBillingHistory] Error:', error)
+    throw error
   }
 }

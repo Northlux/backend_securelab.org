@@ -1,11 +1,35 @@
 'use server'
 
-import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createServerSupabaseAnonClient } from '@/lib/supabase/server'
+import { z } from 'zod'
+import { getCurrentUser } from '@/lib/auth/server-auth'
+import { checkRateLimit } from '@/lib/utils/rate-limiter'
+import { createRateLimitKey, getRateLimit, type RateLimitKey } from '@/lib/utils/rate-limits'
 
+/**
+ * Get signal statistics
+ * ✅ Auth check: Any authenticated user
+ * ✅ Rate limiting: 1000/hour (read operation)
+ */
 export async function getSignalStats() {
-  const supabase = await createServerSupabaseClient()
-
   try {
+    // Auth check
+    const user = await getCurrentUser()
+
+    // Rate limiting
+    const rateLimit = checkRateLimit(
+      createRateLimitKey(user.userId, 'SIGNAL_STATS' as RateLimitKey),
+      getRateLimit('SIGNAL_STATS' as RateLimitKey).max,
+      getRateLimit('SIGNAL_STATS' as RateLimitKey).window
+    )
+
+    if (!rateLimit.allowed) {
+      throw new Error(
+        `Rate limit exceeded. Try again in ${rateLimit.resetSeconds} seconds.`
+      )
+    }
+
+    const supabase = await createServerSupabaseAnonClient()
     const { data, error } = await supabase
       .from('signals')
       .select('created_at, severity')
@@ -26,15 +50,35 @@ export async function getSignalStats() {
       ).length,
     }
   } catch (err) {
-    console.error('Error fetching signal stats:', err)
-    return { totalSignals: 0, thisWeek: 0, critical: 0 }
+    console.error('[getSignalStats] Error:', err)
+    throw err
   }
 }
 
+/**
+ * Get source statistics
+ * ✅ Auth check: Any authenticated user
+ * ✅ Rate limiting: 1000/hour (read operation)
+ */
 export async function getSourceStats() {
-  const supabase = await createServerSupabaseClient()
-
   try {
+    // Auth check
+    const user = await getCurrentUser()
+
+    // Rate limiting
+    const rateLimit = checkRateLimit(
+      createRateLimitKey(user.userId, 'SOURCE_STATS' as RateLimitKey),
+      getRateLimit('SOURCE_STATS' as RateLimitKey).max,
+      getRateLimit('SOURCE_STATS' as RateLimitKey).window
+    )
+
+    if (!rateLimit.allowed) {
+      throw new Error(
+        `Rate limit exceeded. Try again in ${rateLimit.resetSeconds} seconds.`
+      )
+    }
+
+    const supabase = await createServerSupabaseAnonClient()
     const { data, error } = await supabase.from('sources').select('is_active')
 
     if (error) throw error
@@ -47,15 +91,35 @@ export async function getSourceStats() {
       ).length,
     }
   } catch (err) {
-    console.error('Error fetching source stats:', err)
-    return { totalSources: 0, activeSources: 0 }
+    console.error('[getSourceStats] Error:', err)
+    throw err
   }
 }
 
+/**
+ * Get signals grouped by category
+ * ✅ Auth check: Any authenticated user
+ * ✅ Rate limiting: 1000/hour (read operation)
+ */
 export async function getSignalsByCategory() {
-  const supabase = await createServerSupabaseClient()
-
   try {
+    // Auth check
+    const user = await getCurrentUser()
+
+    // Rate limiting
+    const rateLimit = checkRateLimit(
+      createRateLimitKey(user.userId, 'SIGNAL_CATEGORY' as RateLimitKey),
+      getRateLimit('SIGNAL_CATEGORY' as RateLimitKey).max,
+      getRateLimit('SIGNAL_CATEGORY' as RateLimitKey).window
+    )
+
+    if (!rateLimit.allowed) {
+      throw new Error(
+        `Rate limit exceeded. Try again in ${rateLimit.resetSeconds} seconds.`
+      )
+    }
+
+    const supabase = await createServerSupabaseAnonClient()
     const { data, error } = await supabase.from('signals').select('signal_category')
 
     if (error) throw error
@@ -73,20 +137,49 @@ export async function getSignalsByCategory() {
       count,
     }))
   } catch (err) {
-    console.error('Error fetching signal categories:', err)
-    return []
+    console.error('[getSignalsByCategory] Error:', err)
+    throw err
   }
 }
 
-export async function getRecentImports(limit: number = 10) {
-  const supabase = await createServerSupabaseClient()
+// Validation schema for getRecentImports
+const RecentImportsSchema = z.object({
+  limit: z.number().int().min(1).max(100).default(10),
+})
 
+/**
+ * Get recent ingestion logs
+ * ✅ Auth check: Any authenticated user
+ * ✅ Rate limiting: 1000/hour (read operation)
+ * ✅ Input validation: limit parameter
+ */
+export async function getRecentImports(limit: number = 10) {
   try {
+    // Auth check
+    const user = await getCurrentUser()
+
+    // Input validation
+    const validated = RecentImportsSchema.parse({ limit })
+
+    // Rate limiting
+    const rateLimit = checkRateLimit(
+      createRateLimitKey(user.userId, 'INGESTION_LIST' as RateLimitKey),
+      getRateLimit('INGESTION_LIST' as RateLimitKey).max,
+      getRateLimit('INGESTION_LIST' as RateLimitKey).window
+    )
+
+    if (!rateLimit.allowed) {
+      throw new Error(
+        `Rate limit exceeded. Try again in ${rateLimit.resetSeconds} seconds.`
+      )
+    }
+
+    const supabase = await createServerSupabaseAnonClient()
     const { data, error } = await supabase
       .from('ingestion_logs')
       .select('*')
       .order('started_at', { ascending: false })
-      .limit(limit)
+      .limit(validated.limit)
 
     if (error) throw error
 
@@ -99,15 +192,35 @@ export async function getRecentImports(limit: number = 10) {
       signals_errors: log.signals_errored || 0,
     }))
   } catch (err) {
-    console.error('Error fetching recent imports:', err)
-    return []
+    console.error('[getRecentImports] Error:', err)
+    throw err
   }
 }
 
+/**
+ * Get signals grouped by severity
+ * ✅ Auth check: Any authenticated user
+ * ✅ Rate limiting: 1000/hour (read operation)
+ */
 export async function getSignalsBySeverity() {
-  const supabase = await createServerSupabaseClient()
-
   try {
+    // Auth check
+    const user = await getCurrentUser()
+
+    // Rate limiting
+    const rateLimit = checkRateLimit(
+      createRateLimitKey(user.userId, 'SIGNAL_SEVERITY' as RateLimitKey),
+      getRateLimit('SIGNAL_SEVERITY' as RateLimitKey).max,
+      getRateLimit('SIGNAL_SEVERITY' as RateLimitKey).window
+    )
+
+    if (!rateLimit.allowed) {
+      throw new Error(
+        `Rate limit exceeded. Try again in ${rateLimit.resetSeconds} seconds.`
+      )
+    }
+
+    const supabase = await createServerSupabaseAnonClient()
     const { data, error } = await supabase.from('signals').select('severity')
 
     if (error) throw error
@@ -125,7 +238,7 @@ export async function getSignalsBySeverity() {
       count,
     }))
   } catch (err) {
-    console.error('Error fetching signal severity:', err)
-    return []
+    console.error('[getSignalsBySeverity] Error:', err)
+    throw err
   }
 }
