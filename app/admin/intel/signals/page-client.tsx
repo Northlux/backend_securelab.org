@@ -1,27 +1,42 @@
 'use client'
 
 import { useState } from 'react'
-import { Trash2, Edit2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Trash2, ChevronLeft, ChevronRight, Check, X } from 'lucide-react'
 import {
   getSignals,
   deleteSignal,
-  updateSignalSeverity,
+  approveSignal,
+  rejectSignal,
 } from '@/app/actions/intel/signals'
 import {
   bulkDeleteSignals,
-  bulkUpdateSeverity,
   bulkMarkAsVerified,
 } from '@/app/actions/intel/bulk-operations'
 import { BulkOperationsToolbar } from '@/app/components/admin/bulk-operations-toolbar'
+import { SignalDetailModal } from '@/app/components/admin/signals-detail-modal'
 
 interface Signal {
   id: string
   title: string
   summary: string | null
+  full_content: string | null
   severity: string
   signal_category: string
   created_at: string
+  publication_status: string
+  rejection_reason: string | null
+  is_verified: boolean
+  is_featured: boolean
+  confidence_level: number
+  cve_ids: string[]
+  threat_actors: string[]
+  target_industries: string[]
+  target_regions: string[]
+  affected_products: string[]
+  source_url: string | null
   source_id: string | null
+  approved_at: string | null
+  rejected_at: string | null
 }
 
 interface SignalsClientProps {
@@ -39,11 +54,11 @@ export default function SignalsClient({ initialSignals, initialCount }: SignalsC
     severity: '',
     category: '',
     search: '',
+    status: 'pending', // Default to show only pending signals
   })
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editSeverity, setEditSeverity] = useState<string>('')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [bulkSeverity, setBulkSeverity] = useState<string>('medium')
+  const [selectedSignal, setSelectedSignal] = useState<Signal | null>(null)
+  const [showDetailModal, setShowDetailModal] = useState(false)
 
   const pageSize = 20
 
@@ -62,6 +77,7 @@ export default function SignalsClient({ initialSignals, initialCount }: SignalsC
         severity: f.severity || undefined,
         category: f.category || undefined,
         search: f.search || undefined,
+        status: f.status || undefined,
       })
       setSignals(data || [])
       setTotal(count || 0)
@@ -88,18 +104,27 @@ export default function SignalsClient({ initialSignals, initialCount }: SignalsC
     }
   }
 
-  const handleSeverityUpdate = async (id: string) => {
+  const handleApproveQuick = async (id: string) => {
     setLoading(true)
     setError(null)
     try {
-      await updateSignalSeverity(
-        id,
-        editSeverity as 'critical' | 'high' | 'medium' | 'low' | 'info'
-      )
+      await approveSignal(id)
       await loadSignals(page)
-      setEditingId(null)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update severity')
+      setError(err instanceof Error ? err.message : 'Failed to approve')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleRejectQuick = async (id: string, reason: 'ad' | 'irrelevant' | 'bad_content') => {
+    setLoading(true)
+    setError(null)
+    try {
+      await rejectSignal(id, reason)
+      await loadSignals(page)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reject')
     } finally {
       setLoading(false)
     }
@@ -140,25 +165,6 @@ export default function SignalsClient({ initialSignals, initialCount }: SignalsC
     }
   }
 
-  const handleBulkSeverityUpdate = async () => {
-    if (selectedIds.size === 0) return
-
-    setLoading(true)
-    setError(null)
-    try {
-      await bulkUpdateSeverity(
-        Array.from(selectedIds),
-        bulkSeverity as 'critical' | 'high' | 'medium' | 'low' | 'info'
-      )
-      setSelectedIds(new Set())
-      await loadSignals(page)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update severity')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const handleBulkMarkVerified = async () => {
     if (selectedIds.size === 0) return
 
@@ -173,6 +179,16 @@ export default function SignalsClient({ initialSignals, initialCount }: SignalsC
     } finally {
       setLoading(false)
     }
+  }
+
+  const statusColor = (status: string) => {
+    const colors: Record<string, string> = {
+      pending: 'bg-yellow-500/20 border-yellow-500/30 text-yellow-300',
+      approved: 'bg-green-500/20 border-green-500/30 text-green-300',
+      rejected: 'bg-red-500/20 border-red-500/30 text-red-300',
+      archived: 'bg-slate-500/20 border-slate-500/30 text-slate-300',
+    }
+    return colors[status] || colors.pending
   }
 
   const severityColor = (severity: string) => {
@@ -192,7 +208,7 @@ export default function SignalsClient({ initialSignals, initialCount }: SignalsC
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-slate-100">Threat Signals</h1>
-        <p className="text-sm text-slate-400 mt-1">Manage and moderate threat intelligence signals</p>
+        <p className="text-sm text-slate-400 mt-1">Review and moderate threat intelligence signals for publication</p>
       </div>
 
       {error && (
@@ -201,8 +217,9 @@ export default function SignalsClient({ initialSignals, initialCount }: SignalsC
         </div>
       )}
 
+      {/* Filters */}
       <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <input
             type="text"
             placeholder="Search signals..."
@@ -211,6 +228,17 @@ export default function SignalsClient({ initialSignals, initialCount }: SignalsC
             className="px-3 py-2 bg-slate-700 border border-slate-600 rounded text-slate-100 placeholder-slate-500 focus:border-brand-500 focus:outline-none"
             disabled={loading}
           />
+          <select
+            value={filters.status}
+            onChange={(e) => handleFilterChange({ ...filters, status: e.target.value })}
+            className="px-3 py-2 bg-slate-700 border border-slate-600 rounded text-slate-100 focus:border-brand-500 focus:outline-none"
+            disabled={loading}
+          >
+            <option value="pending">Pending Review</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+            <option value="">All Status</option>
+          </select>
           <select
             value={filters.severity}
             onChange={(e) => handleFilterChange({ ...filters, severity: e.target.value })}
@@ -222,7 +250,6 @@ export default function SignalsClient({ initialSignals, initialCount }: SignalsC
             <option value="high">High</option>
             <option value="medium">Medium</option>
             <option value="low">Low</option>
-            <option value="info">Info</option>
           </select>
           <select
             value={filters.category}
@@ -232,11 +259,11 @@ export default function SignalsClient({ initialSignals, initialCount }: SignalsC
           >
             <option value="">All Categories</option>
             <option value="vulnerability">Vulnerability</option>
-            <option value="breach">Breach</option>
             <option value="malware">Malware</option>
+            <option value="breach">Breach</option>
             <option value="threat_actor">Threat Actor</option>
             <option value="exploit">Exploit</option>
-            <option value="news">News</option>
+            <option value="ransomware">Ransomware</option>
           </select>
           <div className="text-sm text-slate-400 flex items-center justify-end">
             {total} signals total
@@ -244,6 +271,7 @@ export default function SignalsClient({ initialSignals, initialCount }: SignalsC
         </div>
       </div>
 
+      {/* Signals Table */}
       <div className="bg-slate-800/50 border border-slate-700 rounded-lg overflow-hidden">
         {signals.length === 0 ? (
           <div className="p-6 text-center text-slate-400">No signals found</div>
@@ -262,8 +290,8 @@ export default function SignalsClient({ initialSignals, initialCount }: SignalsC
                     />
                   </th>
                   <th className="px-6 py-3 text-left text-sm font-semibold text-slate-200">Title</th>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-slate-200">Status</th>
                   <th className="px-6 py-3 text-left text-sm font-semibold text-slate-200">Severity</th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-slate-200">Category</th>
                   <th className="px-6 py-3 text-left text-sm font-semibold text-slate-200">Date</th>
                   <th className="px-6 py-3 text-right text-sm font-semibold text-slate-200">Actions</th>
                 </tr>
@@ -272,7 +300,11 @@ export default function SignalsClient({ initialSignals, initialCount }: SignalsC
                 {signals.map((signal) => (
                   <tr
                     key={signal.id}
-                    className={`transition-colors ${
+                    onClick={() => {
+                      setSelectedSignal(signal)
+                      setShowDetailModal(true)
+                    }}
+                    className={`transition-colors cursor-pointer ${
                       selectedIds.has(signal.id) ? 'bg-slate-700/50' : 'hover:bg-slate-700/30'
                     }`}
                   >
@@ -286,70 +318,63 @@ export default function SignalsClient({ initialSignals, initialCount }: SignalsC
                       />
                     </td>
                     <td className="px-6 py-4">
-                      <div className="max-w-xs">
-                        <p className="text-sm text-slate-100 font-medium truncate">{signal.title}</p>
+                      <div className="max-w-sm">
+                        <p className="text-sm text-slate-100 font-medium line-clamp-2">{signal.title}</p>
                         {signal.summary && (
-                          <p className="text-xs text-slate-400 mt-1 line-clamp-2">{signal.summary}</p>
+                          <p className="text-xs text-slate-400 mt-1 line-clamp-1">{signal.summary}</p>
                         )}
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      {editingId === signal.id ? (
-                        <div className="flex gap-2">
-                          <select
-                            value={editSeverity}
-                            onChange={(e) => setEditSeverity(e.target.value)}
-                            className="px-2 py-1 text-xs bg-slate-700 border border-slate-600 rounded text-slate-100"
-                            disabled={loading}
-                          >
-                            <option value="critical">Critical</option>
-                            <option value="high">High</option>
-                            <option value="medium">Medium</option>
-                            <option value="low">Low</option>
-                            <option value="info">Info</option>
-                          </select>
-                          <button
-                            onClick={() => handleSeverityUpdate(signal.id)}
-                            disabled={loading}
-                            className="px-2 py-1 text-xs bg-brand-600 text-white rounded hover:bg-brand-700 disabled:opacity-50"
-                          >
-                            Save
-                          </button>
-                          <button
-                            onClick={() => setEditingId(null)}
-                            disabled={loading}
-                            className="px-2 py-1 text-xs bg-slate-700 text-slate-100 rounded hover:bg-slate-600 disabled:opacity-50"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      ) : (
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${severityColor(signal.severity)}`}>
-                          {signal.severity.toUpperCase()}
-                        </span>
-                      )}
+                      <span
+                        className={`px-2 py-1 rounded text-xs font-medium border ${statusColor(
+                          signal.publication_status || 'pending'
+                        )}`}
+                      >
+                        {signal.publication_status
+                          ? signal.publication_status.charAt(0).toUpperCase() + signal.publication_status.slice(1)
+                          : 'Pending'}
+                      </span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-slate-400">{signal.signal_category}</td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${severityColor(signal.severity)}`}>
+                        {signal.severity.toUpperCase()}
+                      </span>
+                    </td>
                     <td className="px-6 py-4 text-sm text-slate-400">
                       {new Date(signal.created_at).toLocaleDateString()}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <div className="flex gap-2 justify-end">
-                        <button
-                          onClick={() => {
-                            setEditingId(signal.id)
-                            setEditSeverity(signal.severity)
-                          }}
-                          disabled={loading || editingId === signal.id}
-                          className="p-1 text-slate-400 hover:text-brand-400 disabled:opacity-50 transition-colors"
-                          title="Edit severity"
-                        >
-                          <Edit2 size={16} />
-                        </button>
+                      <div className="flex gap-2 justify-end" onClick={(e) => e.stopPropagation()}>
+                        {/* Quick Approve (pending only) */}
+                        {signal.publication_status === 'pending' && (
+                          <button
+                            onClick={() => handleApproveQuick(signal.id)}
+                            disabled={loading}
+                            className="p-1.5 text-slate-400 hover:text-green-400 disabled:opacity-50 transition-colors"
+                            title="Approve"
+                          >
+                            <Check size={16} />
+                          </button>
+                        )}
+
+                        {/* Quick Reject (pending only) */}
+                        {signal.publication_status === 'pending' && (
+                          <button
+                            onClick={() => handleRejectQuick(signal.id, 'irrelevant')}
+                            disabled={loading}
+                            className="p-1.5 text-slate-400 hover:text-red-400 disabled:opacity-50 transition-colors"
+                            title="Quick reject"
+                          >
+                            <X size={16} />
+                          </button>
+                        )}
+
+                        {/* Delete */}
                         <button
                           onClick={() => handleDelete(signal.id)}
                           disabled={loading}
-                          className="p-1 text-slate-400 hover:text-red-400 disabled:opacity-50 transition-colors"
+                          className="p-1.5 text-slate-400 hover:text-red-400 disabled:opacity-50 transition-colors"
                           title="Delete"
                         >
                           <Trash2 size={16} />
@@ -364,6 +389,7 @@ export default function SignalsClient({ initialSignals, initialCount }: SignalsC
         )}
       </div>
 
+      {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
           <span className="text-sm text-slate-400">
@@ -395,9 +421,17 @@ export default function SignalsClient({ initialSignals, initialCount }: SignalsC
         onDelete={handleBulkDelete}
         onMarkVerified={handleBulkMarkVerified}
         onClearSelection={() => setSelectedIds(new Set())}
-        severity={bulkSeverity}
-        onSeverityChange={setBulkSeverity}
-        onBulkSeverityUpdate={handleBulkSeverityUpdate}
+      />
+
+      {/* Detail Modal */}
+      <SignalDetailModal
+        signal={selectedSignal}
+        isOpen={showDetailModal}
+        onClose={() => {
+          setShowDetailModal(false)
+          setSelectedSignal(null)
+        }}
+        onAction={() => loadSignals(page)}
       />
     </div>
   )

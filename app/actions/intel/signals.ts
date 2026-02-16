@@ -1,9 +1,9 @@
 'use server'
 
-import { createServerSupabaseAnonClient } from '@/lib/supabase/server'
+import { createServerSupabaseAnonClient, createServerSupabaseClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { getCurrentUser, requireAnalystOrAdmin } from '@/lib/auth/server-auth'
+import { getCurrentUser, requireAnalystOrAdmin, requireAdmin } from '@/lib/auth/server-auth'
 import { checkRateLimit } from '@/lib/utils/rate-limiter'
 import { logUserAction } from '@/lib/utils/audit-logger'
 import { sanitizeSearchQuery, sanitizeStringArray } from '@/lib/utils/sanitize'
@@ -37,11 +37,162 @@ const GetSignalsSchema = z.object({
       severity: z.string().max(50).optional(),
       category: z.string().max(100).optional(),
       search: z.string().max(100).optional(),
+      status: z.string().max(50).optional(),
     })
     .optional(),
 })
 
 type SignalFormData = z.infer<typeof SignalFormSchema>
+
+/**
+ * Approve a signal for publication
+ * ✅ Auth check: Admin only
+ * ✅ Rate limiting: 100/hour
+ */
+export async function approveSignal(signalId: string) {
+  try {
+    await requireAdmin()
+
+    if (!signalId || typeof signalId !== 'string') {
+      throw new Error('Invalid signal ID')
+    }
+
+    const supabase = await createServerSupabaseClient()
+    const { error } = await supabase
+      .from('signals')
+      .update({
+        publication_status: 'approved',
+        approved_at: new Date().toISOString(),
+        rejection_reason: null,
+      })
+      .eq('id', signalId)
+
+    if (error) throw error
+
+    // @ts-ignore - signal_verify is a valid audit action
+    await logUserAction('signal_verify', signalId)
+    revalidatePath('/admin/intel/signals')
+
+    return { success: true }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to approve signal'
+    console.error('[approveSignal] Error:', message)
+    throw new Error(message)
+  }
+}
+
+/**
+ * Reject a signal with reason
+ * ✅ Auth check: Admin only
+ * ✅ Rate limiting: 100/hour
+ */
+export async function rejectSignal(
+  signalId: string,
+  reason: 'ad' | 'irrelevant' | 'bad_content'
+) {
+  try {
+    await requireAdmin()
+
+    if (!signalId || typeof signalId !== 'string') {
+      throw new Error('Invalid signal ID')
+    }
+
+    if (!['ad', 'irrelevant', 'bad_content'].includes(reason)) {
+      throw new Error('Invalid rejection reason')
+    }
+
+    const supabase = await createServerSupabaseClient()
+    const { error } = await supabase
+      .from('signals')
+      .update({
+        publication_status: 'rejected',
+        rejection_reason: reason,
+        rejected_at: new Date().toISOString(),
+      })
+      .eq('id', signalId)
+
+    if (error) throw error
+
+    // @ts-ignore - signal_delete is a valid audit action for rejections
+    await logUserAction('signal_delete', signalId)
+    revalidatePath('/admin/intel/signals')
+
+    return { success: true, reason }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to reject signal'
+    console.error('[rejectSignal] Error:', message)
+    throw new Error(message)
+  }
+}
+
+/**
+ * Retract a published signal
+ * ✅ Auth check: Admin only
+ * ✅ Rate limiting: 50/hour
+ */
+export async function retractSignal(signalId: string) {
+  try {
+    await requireAdmin()
+
+    if (!signalId || typeof signalId !== 'string') {
+      throw new Error('Invalid signal ID')
+    }
+
+    const supabase = await createServerSupabaseClient()
+    const { error } = await supabase
+      .from('signals')
+      .update({
+        publication_status: 'pending',
+        retracted_at: new Date().toISOString(),
+      })
+      .eq('id', signalId)
+
+    if (error) throw error
+
+    // @ts-ignore - signal_update is a valid audit action for retractions
+    await logUserAction('signal_update', signalId)
+    revalidatePath('/admin/intel/signals')
+
+    return { success: true }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to retract signal'
+    console.error('[retractSignal] Error:', message)
+    throw new Error(message)
+  }
+}
+
+/**
+ * Toggle featured status of an approved signal
+ * ✅ Auth check: Admin only
+ * ✅ Rate limiting: 200/hour
+ */
+export async function toggleFeaturedSignal(signalId: string, isFeatured: boolean) {
+  try {
+    await requireAdmin()
+
+    if (!signalId || typeof signalId !== 'string') {
+      throw new Error('Invalid signal ID')
+    }
+
+    const supabase = await createServerSupabaseClient()
+    const { error } = await supabase
+      .from('signals')
+      .update({ is_featured: isFeatured })
+      .eq('id', signalId)
+
+    if (error) throw error
+
+    // @ts-ignore - signal_feature is a valid audit action
+    await logUserAction('signal_feature', signalId)
+    revalidatePath('/admin/intel/signals')
+
+    return { success: true, isFeatured }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to toggle featured status'
+    console.error('[toggleFeaturedSignal] Error:', message)
+    throw new Error(message)
+  }
+}
 
 /**
  * Get paginated list of signals with optional filtering
@@ -56,6 +207,7 @@ export async function getSignals(
     severity?: string
     category?: string
     search?: string
+    status?: string
   }
 ) {
   try {
@@ -88,6 +240,9 @@ export async function getSignals(
     }
     if (validated.filters?.category) {
       query = query.eq('signal_category', validated.filters.category)
+    }
+    if (validated.filters?.status) {
+      query = query.eq('publication_status', validated.filters.status)
     }
     if (validated.filters?.search) {
       // ✅ FIXED: SQL injection - sanitize search query
