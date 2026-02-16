@@ -224,6 +224,78 @@ export const RATE_LIMITS = {
     window: 60 * 60 * 1000, // 1000 per hour (read operation)
     description: 'View statistics',
   },
+  SIGNAL_STATS: {
+    max: 1000,
+    window: 60 * 60 * 1000, // 1000 per hour (read operation)
+    description: 'Signal statistics',
+  },
+  SIGNAL_CATEGORY: {
+    max: 1000,
+    window: 60 * 60 * 1000, // 1000 per hour (read operation)
+    description: 'Signals by category',
+  },
+  SIGNAL_SEVERITY: {
+    max: 1000,
+    window: 60 * 60 * 1000, // 1000 per hour (read operation)
+    description: 'Signals by severity',
+  },
+  SOURCE_STATS: {
+    max: 1000,
+    window: 60 * 60 * 1000, // 1000 per hour (read operation)
+    description: 'Source statistics',
+  },
+
+  // ============================================================================
+  // SUBSCRIPTION OPERATIONS (BILLING)
+  // ============================================================================
+  SUBSCRIPTION_LIST: {
+    max: 500,
+    window: 60 * 60 * 1000, // 500 per hour (read operation)
+    description: 'List subscriptions',
+  },
+  SUBSCRIPTION_DELETE: {
+    max: 20,
+    window: 60 * 60 * 1000, // 20 per hour
+    description: 'Delete subscription',
+  },
+  SUBSCRIPTION_TIERS: {
+    max: 1000,
+    window: 60 * 60 * 1000, // 1000 per hour (read operation)
+    description: 'List subscription tiers',
+  },
+  SUBSCRIPTION_REQUESTS: {
+    max: 100,
+    window: 60 * 60 * 1000, // 100 per hour (read operation)
+    description: 'List upgrade requests',
+  },
+  BILLING_HISTORY: {
+    max: 500,
+    window: 60 * 60 * 1000, // 500 per hour (read operation)
+    description: 'View billing history',
+  },
+
+  // ============================================================================
+  // USER MANAGEMENT - READ OPERATIONS
+  // ============================================================================
+  USER_LIST: {
+    max: 100,
+    window: 60 * 60 * 1000, // 100 per hour (read operation)
+    description: 'List users',
+  },
+  USER_READ: {
+    max: 500,
+    window: 60 * 60 * 1000, // 500 per hour (read operation)
+    description: 'Read user details',
+  },
+
+  // ============================================================================
+  // AUDIT OPERATIONS
+  // ============================================================================
+  AUDIT_LOG_LIST: {
+    max: 500,
+    window: 60 * 60 * 1000, // 500 per hour (read operation)
+    description: 'List audit logs',
+  },
 } as const
 
 // Type for rate limit keys

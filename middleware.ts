@@ -42,9 +42,10 @@ export async function middleware(request: NextRequest) {
   }
 
   // Protected routes - require authentication
+  // Server actions will enforce admin role requirement
   if (request.nextUrl.pathname.startsWith('/admin')) {
     if (!user) {
-      // Redirect to login with return URL
+      // Redirect unauthenticated users to login
       const loginUrl = new URL('/login', request.url)
       loginUrl.searchParams.set('next', request.nextUrl.pathname)
       console.log(`[Middleware] Redirecting to login, user not found`)

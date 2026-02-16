@@ -1,5 +1,5 @@
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+// import { createServerClient } from '@supabase/ssr'
+// import { cookies } from 'next/headers'
 import * as fs from 'fs'
 
 /**
@@ -48,7 +48,7 @@ async function applyMigration() {
         }
 
         // Log the operation being performed
-        const operation = statement.split('\n')[0].substring(0, 60)
+        const operation = statement.split('\n')[0]?.substring(0, 60) || 'Unknown operation'
         process.stdout.write(`  ${operation}... `)
 
         // For now, just log that we would execute it
