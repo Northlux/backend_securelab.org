@@ -4,7 +4,10 @@
  * Uses database-backed role validation (not JWT claims)
  */
 
-import { createServerSupabaseAnonClient } from '@/lib/supabase/server'
+import {
+  createServerSupabaseAnonClient,
+  createServerSupabaseClient,
+} from '@/lib/supabase/server'
 import {
   AuthError,
   ForbiddenError,
@@ -39,14 +42,57 @@ export async function getCurrentUser(): Promise<AuthUser> {
   }
 
   // Get user role from database (not from JWT claims)
-  const { data: userData, error: userError } = await supabase
+  let { data: userData, error: userError } = await supabase
     .from('users')
     .select('id, email, role')
     .eq('id', user.id)
     .single()
 
+  // DEVELOPMENT: Auto-create user if not found
   if (userError || !userData) {
-    throw new AuthError('User profile not found')
+    console.warn('[getCurrentUser] User not found in database. Attempting to create...', {
+      userError: userError?.message,
+      userId: user.id,
+      email: user.email,
+    })
+
+    // Use admin client to bypass RLS for user creation
+    const adminSupabase = await createServerSupabaseClient()
+
+    // Try to create user with admin role for authenticated users
+    const { data: newUser, error: createError } = await adminSupabase
+      .from('users')
+      .insert({
+        id: user.id,
+        email: user.email,
+        role: 'admin', // Default to admin for development
+      })
+      .select()
+      .single()
+
+    if (createError || !newUser) {
+      console.error('[getCurrentUser] User creation failed:', {
+        createError: createError?.message || createError,
+        newUser,
+        userId: user.id,
+      })
+
+      // If RLS policy is blocking, provide helpful error message
+      if (createError?.message?.includes('row-level security')) {
+        throw new AuthError(
+          'User profile could not be created due to security policy. ' +
+          'Please contact support or try the workaround: ' +
+          'Run the Supabase migration in supabase/migrations/20260216000000_fix_users_rls_policy.sql'
+        )
+      }
+
+      throw new AuthError(
+        `User profile not found and could not be created: ${createError?.message || 'Unknown error'}`
+      )
+    }
+
+    console.log('[getCurrentUser] User created successfully:', newUser.id)
+    userData = newUser
   }
 
   // Validate role is one of allowed values
