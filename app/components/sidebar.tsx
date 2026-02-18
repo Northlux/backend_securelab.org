@@ -14,6 +14,7 @@ import {
   X,
   Search,
   Shield,
+  Radio,
 } from 'lucide-react'
 
 interface MenuItem {
@@ -39,6 +40,11 @@ const menuItems: MenuItem[] = [
       { label: 'Approved', href: '/admin/intel?status=approved', icon: null },
       { label: 'In Review', href: '/admin/intel?status=review', icon: null },
     ],
+  },
+  {
+    label: 'Sources',
+    href: '/admin/sources',
+    icon: <Radio size={18} />,
   },
   {
     label: 'User Management',
