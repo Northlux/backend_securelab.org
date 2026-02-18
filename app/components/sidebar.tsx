@@ -13,6 +13,7 @@ import {
   Menu,
   X,
   Search,
+  Shield,
 } from 'lucide-react'
 
 interface MenuItem {
@@ -27,6 +28,17 @@ const menuItems: MenuItem[] = [
     label: 'Dashboard',
     href: '/admin',
     icon: <LayoutDashboard size={18} />,
+  },
+  {
+    label: 'Intel Management',
+    href: '/admin/intel',
+    icon: <Shield size={18} />,
+    subItems: [
+      { label: 'Signal Queue', href: '/admin/intel', icon: null },
+      { label: 'Pending Review', href: '/admin/intel?status=pending', icon: null },
+      { label: 'Approved', href: '/admin/intel?status=approved', icon: null },
+      { label: 'In Review', href: '/admin/intel?status=review', icon: null },
+    ],
   },
   {
     label: 'User Management',
