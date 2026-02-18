@@ -15,6 +15,7 @@ import {
   Search,
   Shield,
   Radio,
+  ScrollText,
 } from 'lucide-react'
 
 interface MenuItem {
@@ -45,6 +46,11 @@ const menuItems: MenuItem[] = [
     label: 'Sources',
     href: '/admin/sources',
     icon: <Radio size={18} />,
+  },
+  {
+    label: 'Ingestion Logs',
+    href: '/admin/logs',
+    icon: <ScrollText size={18} />,
   },
   {
     label: 'User Management',

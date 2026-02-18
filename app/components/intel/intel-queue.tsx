@@ -94,17 +94,31 @@ export function IntelQueue() {
     })
   }
 
-  const handleAction = async (id: string, action: string) => {
+  const [rejectModal, setRejectModal] = useState<string | null>(null)
+
+  const handleAction = async (id: string, action: string, rejectionReason?: string) => {
     try {
+      if (action === 'reject' && !rejectionReason) {
+        // Show rejection reason modal
+        setRejectModal(id)
+        return
+      }
+
+      const body: Record<string, unknown> = {
+        triage_status: action === 'approve' ? 'approved' : 'rejected',
+      }
+      if (rejectionReason) {
+        body.rejection_reason = rejectionReason
+      }
+
       const res = await fetch(`/api/v1/admin/signals/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          triage_status: action === 'approve' ? 'approved' : 'rejected',
-        }),
+        body: JSON.stringify(body),
       })
       if (res.ok) {
         showToast('success', `Signal ${action}d`)
+        setRejectModal(null)
         fetchSignals()
         fetchStats()
       } else {
@@ -228,7 +242,91 @@ export function IntelQueue() {
         </div>
       )}
 
+      {/* Rejection reason modal */}
+      {rejectModal && (
+        <RejectModal
+          onClose={() => setRejectModal(null)}
+          onSubmit={(reason) => handleAction(rejectModal, 'reject', reason)}
+        />
+      )}
+
       <ToastContainer />
+    </div>
+  )
+}
+
+const REJECTION_REASONS = [
+  'Product review / comparison',
+  'Vendor marketing / PR',
+  'Listicle / best-of article',
+  'Not cybersecurity relevant',
+  'Duplicate content',
+  'Low quality / no substance',
+  'Sponsored / advertorial',
+  'Generic best practices',
+  'Career / hiring news',
+  'Event / conference promo',
+  'Other',
+]
+
+function RejectModal({
+  onClose,
+  onSubmit,
+}: {
+  onClose: () => void
+  onSubmit: (reason: string) => void
+}) {
+  const [reason, setReason] = useState('')
+  const [custom, setCustom] = useState('')
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm">
+      <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl">
+        <h2 className="text-lg font-600 text-slate-100 mb-4">Why reject this signal?</h2>
+        <p className="text-xs text-slate-500 mb-4">This helps Carter learn your preferences and improve future scoring.</p>
+
+        <div className="space-y-2 mb-4 max-h-48 overflow-y-auto">
+          {REJECTION_REASONS.map((r) => (
+            <button
+              key={r}
+              onClick={() => setReason(r)}
+              className={`w-full text-left px-3 py-2 text-sm rounded-lg border transition-all ${
+                reason === r
+                  ? 'border-brand-500/50 bg-brand-500/10 text-brand-300'
+                  : 'border-slate-800 bg-slate-800/40 text-slate-400 hover:border-slate-700 hover:text-slate-300'
+              }`}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+
+        {reason === 'Other' && (
+          <input
+            type="text"
+            placeholder="Describe the reason..."
+            value={custom}
+            onChange={(e) => setCustom(e.target.value)}
+            className="w-full px-3 py-2 mb-4 text-sm bg-slate-800 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 transition-all"
+          />
+        )}
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => onSubmit(reason === 'Other' ? custom || 'Other' : reason)}
+            disabled={!reason}
+            className="flex-1 py-2.5 bg-red-500/15 text-red-400 hover:bg-red-500/25 border border-red-500/20 font-500 rounded-lg transition-all text-sm disabled:opacity-30"
+          >
+            Reject
+          </button>
+          <button
+            onClick={onClose}
+            className="px-4 py-2.5 text-sm font-500 text-slate-400 hover:text-slate-200 bg-slate-800 border border-slate-700 rounded-lg hover:border-slate-600 transition-all"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
