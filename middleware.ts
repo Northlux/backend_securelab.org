@@ -42,7 +42,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Protected routes - require authentication
-  if (request.nextUrl.pathname.startsWith('/admin')) {
+  if (request.nextUrl.pathname.startsWith('/admin') || request.nextUrl.pathname.startsWith('/mobile')) {
     if (!user) {
       // Redirect to login with return URL
       const loginUrl = new URL('/login', request.url)
