@@ -58,6 +58,7 @@ export async function PATCH(
       .eq('id', id)
 
     if (error) {
+      console.error('[PATCH signals] update signal error:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
     results.signal = 'updated'
@@ -88,18 +89,26 @@ export async function PATCH(
         .eq('signal_id', id)
 
       if (error) {
+        console.error('[PATCH signals] update triage error:', error)
         return NextResponse.json({ error: error.message }, { status: 500 })
       }
     } else {
       // Create a triage result with manual status
+      const insertData: Record<string, unknown> = {
+        signal_id: id,
+        triage_status: body.triage_status,
+        reviewed_at: new Date().toISOString(),
+        reviewed_by: 'admin',
+      }
+      if (body.rejection_reason) {
+        insertData.rejection_reason = body.rejection_reason
+      }
       const { error } = await supabase
         .from('triage_results')
-        .insert({
-          signal_id: id,
-          triage_status: body.triage_status,
-        })
+        .insert(insertData)
 
       if (error) {
+        console.error('[PATCH signals] insert triage error:', error)
         return NextResponse.json({ error: error.message }, { status: 500 })
       }
     }
