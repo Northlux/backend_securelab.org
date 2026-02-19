@@ -307,7 +307,7 @@ function RejectModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm">
       <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl">
-        <h2 className="text-lg font-600 text-slate-100 mb-4">{title || 'Why reject this signal?'}</h2>
+        <h2 className="text-lg font-semibold text-slate-100 mb-4">{title || 'Why reject this signal?'}</h2>
         <p className="text-xs text-slate-500 mb-4">This helps Carter learn your preferences and improve future scoring.</p>
 
         <div className="space-y-2 mb-4 max-h-48 overflow-y-auto">
@@ -340,13 +340,13 @@ function RejectModal({
           <button
             onClick={() => onSubmit(reason === 'Other' ? custom || 'Other' : reason)}
             disabled={!reason}
-            className="flex-1 py-2.5 bg-red-500/15 text-red-400 hover:bg-red-500/25 border border-red-500/20 font-500 rounded-lg transition-all text-sm disabled:opacity-30"
+            className="flex-1 py-2.5 bg-red-500/15 text-red-400 hover:bg-red-500/25 border border-red-500/20 font-medium rounded-lg transition-all text-sm disabled:opacity-30"
           >
             Reject
           </button>
           <button
             onClick={onClose}
-            className="px-4 py-2.5 text-sm font-500 text-slate-400 hover:text-slate-200 bg-slate-800 border border-slate-700 rounded-lg hover:border-slate-600 transition-all"
+            className="px-4 py-2.5 text-sm font-medium text-slate-400 hover:text-slate-200 bg-slate-800 border border-slate-700 rounded-lg hover:border-slate-600 transition-all"
           >
             Cancel
           </button>
@@ -367,10 +367,10 @@ function StatCard({
 }) {
   return (
     <div className="bg-slate-800/40 border border-slate-800 rounded-lg p-5 hover:bg-slate-800/60 hover:border-slate-700 transition-all duration-150">
-      <div className="text-xs font-500 text-slate-400 uppercase tracking-wide mb-3">
+      <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-3">
         {label}
       </div>
-      <div className={`text-2xl font-600 ${accent}`}>
+      <div className={`text-2xl font-semibold ${accent}`}>
         {value.toLocaleString()}
       </div>
     </div>

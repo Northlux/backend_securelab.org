@@ -73,7 +73,7 @@ export function SignalFilters({ stats }: { stats: StatsData | null }) {
           <button
             key={tab.key}
             onClick={() => updateParam('status', tab.key)}
-            className={`px-4 py-2 rounded-md text-xs font-500 transition-all duration-150 ${
+            className={`px-4 py-2 rounded-md text-xs font-medium transition-all duration-150 ${
               currentStatus === tab.key
                 ? 'bg-slate-800 text-slate-100 shadow-sm'
                 : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/50'

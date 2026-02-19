@@ -97,8 +97,8 @@ function ScoreBar({ label, score, reason }: { label: string; score: number | nul
   return (
     <div className="p-4 bg-slate-900/40 rounded-lg border border-slate-800/50 space-y-2">
       <div className="flex items-center justify-between">
-        <span className="text-sm font-500 text-slate-300">{label}</span>
-        <span className="text-lg font-600 text-slate-100">{score}</span>
+        <span className="text-sm font-medium text-slate-300">{label}</span>
+        <span className="text-lg font-semibold text-slate-100">{score}</span>
       </div>
       <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
         <div
@@ -113,23 +113,42 @@ function ScoreBar({ label, score, reason }: { label: string; score: number | nul
   )
 }
 
-function TagList({ label, items }: { label: string; items: string[] }) {
+function TagList({ label, items, linkPrefix }: { label: string; items: string[]; linkPrefix?: string }) {
   if (!items || items.length === 0) return null
   return (
     <div className="space-y-2">
-      <span className="text-xs font-500 text-slate-500 uppercase tracking-wide">{label}</span>
+      <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">{label}</span>
       <div className="flex flex-wrap gap-1.5">
-        {items.map((item, i) => (
-          <span
-            key={i}
-            className="px-2 py-0.5 text-xs bg-slate-800 text-slate-300 rounded border border-slate-700/50"
-          >
-            {item}
-          </span>
-        ))}
+        {items.map((item, i) =>
+          linkPrefix ? (
+            <a
+              key={i}
+              href={`${linkPrefix}${item}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-2 py-0.5 text-xs bg-slate-800 text-brand-400 hover:text-brand-300 rounded border border-slate-700/50 transition-colors"
+            >
+              {item} ↗
+            </a>
+          ) : (
+            <span
+              key={i}
+              className="px-2 py-0.5 text-xs bg-slate-800 text-slate-300 rounded border border-slate-700/50"
+            >
+              {item}
+            </span>
+          )
+        )}
       </div>
     </div>
   )
+}
+
+function getImageUrl(url: string | null): string | null {
+  if (!url) return null
+  if (url.startsWith('http://') || url.startsWith('https://')) return url
+  const r2Base = process.env.NEXT_PUBLIC_R2_PUBLIC_URL || ''
+  return r2Base ? `${r2Base.replace(/\/$/, '')}/${url.replace(/^\//, '')}` : url
 }
 
 function parseSummaryJson(raw: string | null): Record<string, unknown> | null {
@@ -237,7 +256,7 @@ export default function SignalDetailPage() {
           <button
             onClick={() => handleAction('approve')}
             disabled={acting || status === 'approved'}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-500 bg-green-500/15 text-green-400 hover:bg-green-500/25 border border-green-500/20 transition-all disabled:opacity-30"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-green-500/15 text-green-400 hover:bg-green-500/25 border border-green-500/20 transition-all disabled:opacity-30"
           >
             <CheckCircle size={16} />
             Approve
@@ -245,7 +264,7 @@ export default function SignalDetailPage() {
           <button
             onClick={() => handleAction('reject')}
             disabled={acting || status === 'rejected'}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-500 bg-red-500/15 text-red-400 hover:bg-red-500/25 border border-red-500/20 transition-all disabled:opacity-30"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-red-500/15 text-red-400 hover:bg-red-500/25 border border-red-500/20 transition-all disabled:opacity-30"
           >
             <XCircle size={16} />
             Reject
@@ -253,7 +272,7 @@ export default function SignalDetailPage() {
           <button
             onClick={() => handleAction('feature')}
             disabled={acting}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-500 border transition-all ${
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium border transition-all ${
               signal.is_featured
                 ? 'bg-yellow-500/15 text-yellow-400 border-yellow-500/20'
                 : 'bg-slate-800/50 text-slate-400 border-slate-700/50 hover:bg-slate-800'
@@ -265,7 +284,7 @@ export default function SignalDetailPage() {
           <button
             onClick={() => handleAction('verify')}
             disabled={acting}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-500 border transition-all ${
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium border transition-all ${
               signal.is_verified
                 ? 'bg-green-500/15 text-green-400 border-green-500/20'
                 : 'bg-slate-800/50 text-slate-400 border-slate-700/50 hover:bg-slate-800'
@@ -279,20 +298,20 @@ export default function SignalDetailPage() {
 
       {/* Header */}
       <div className="bg-slate-800/40 border border-slate-800 rounded-lg p-6 space-y-4">
-        <h1 className="text-xl font-600 text-slate-100 leading-tight">{signal.title}</h1>
+        <h1 className="text-xl font-semibold text-slate-100 leading-tight">{signal.title}</h1>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <span className={`px-2.5 py-1 rounded text-xs font-500 border ${SEVERITY_STYLES[signal.severity] || ''}`}>
+          <span className={`px-2.5 py-1 rounded text-xs font-medium border ${SEVERITY_STYLES[signal.severity] || ''}`}>
             {signal.severity}
           </span>
-          <span className="px-2.5 py-1 rounded text-xs font-500 bg-slate-700/50 text-slate-300">
+          <span className="px-2.5 py-1 rounded text-xs font-medium bg-slate-700/50 text-slate-300">
             {signal.signal_category}
           </span>
-          <span className={`px-2.5 py-1 rounded text-xs font-500 border ${STATUS_STYLES[status] || ''}`}>
+          <span className={`px-2.5 py-1 rounded text-xs font-medium border ${STATUS_STYLES[status] || ''}`}>
             {status}
           </span>
           {signal.post_source && (
-            <span className="px-2.5 py-1 rounded text-xs font-500 bg-slate-700/30 text-slate-500">
+            <span className="px-2.5 py-1 rounded text-xs font-medium bg-slate-700/30 text-slate-500">
               via {signal.post_source}
             </span>
           )}
@@ -326,7 +345,7 @@ export default function SignalDetailPage() {
         <div className="bg-slate-800/40 border border-slate-800 rounded-lg p-6 space-y-4">
           <div className="flex items-center gap-2 mb-2">
             <Brain size={18} className="text-brand-400" />
-            <h2 className="text-sm font-600 text-slate-100">AI Analysis</h2>
+            <h2 className="text-sm font-semibold text-slate-100">AI Analysis</h2>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -339,7 +358,7 @@ export default function SignalDetailPage() {
       {/* Processed Summary */}
       {summaryData && (
         <div className="bg-slate-800/40 border border-slate-800 rounded-lg p-6 space-y-4">
-          <h2 className="text-sm font-600 text-slate-100 flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-slate-100 flex items-center gap-2">
             <FileText size={16} className="text-brand-400" />
             Processed Summary
           </h2>
@@ -350,7 +369,7 @@ export default function SignalDetailPage() {
 
           {Array.isArray(summaryData.key_takeaways) && summaryData.key_takeaways.length > 0 && (
             <div className="space-y-1.5">
-              <span className="text-xs font-500 text-slate-500 uppercase tracking-wide">Key Takeaways</span>
+              <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Key Takeaways</span>
               <ul className="space-y-1">
                 {(summaryData.key_takeaways as string[]).map((t, i) => (
                   <li key={i} className="text-sm text-slate-400 flex items-start gap-2">
@@ -365,7 +384,7 @@ export default function SignalDetailPage() {
           {typeof summaryData.threat_level === 'string' && summaryData.threat_level && (
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-500">Threat Level:</span>
-              <span className="text-xs font-500 text-slate-300">{summaryData.threat_level}</span>
+              <span className="text-xs font-medium text-slate-300">{summaryData.threat_level}</span>
             </div>
           )}
         </div>
@@ -374,7 +393,7 @@ export default function SignalDetailPage() {
       {/* Polished Content */}
       {triage?.polished_content && (
         <div className="bg-slate-800/40 border border-slate-800 rounded-lg p-6 space-y-3">
-          <h2 className="text-sm font-600 text-slate-100">Polished Content</h2>
+          <h2 className="text-sm font-semibold text-slate-100">Polished Content</h2>
           <div className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">
             {triage.polished_content}
           </div>
@@ -383,7 +402,7 @@ export default function SignalDetailPage() {
 
       {/* Original Content */}
       <div className="bg-slate-800/40 border border-slate-800 rounded-lg p-6 space-y-3">
-        <h2 className="text-sm font-600 text-slate-100">Original Content</h2>
+        <h2 className="text-sm font-semibold text-slate-100">Original Content</h2>
         {signal.summary && (
           <p className="text-sm text-slate-400 leading-relaxed">{signal.summary}</p>
         )}
@@ -399,15 +418,27 @@ export default function SignalDetailPage() {
         )}
       </div>
 
+      {/* Image */}
+      {signal.image_url && (
+        <div className="bg-slate-800/40 border border-slate-800 rounded-lg overflow-hidden">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={getImageUrl(signal.image_url) || ''}
+            alt={signal.title}
+            className="w-full max-h-96 object-cover"
+          />
+        </div>
+      )}
+
       {/* Tags / metadata */}
       {(signal.cve_ids?.length > 0 ||
         signal.threat_actors?.length > 0 ||
         signal.affected_products?.length > 0 ||
         signal.target_industries?.length > 0) && (
         <div className="bg-slate-800/40 border border-slate-800 rounded-lg p-6 space-y-4">
-          <h2 className="text-sm font-600 text-slate-100">Metadata</h2>
+          <h2 className="text-sm font-semibold text-slate-100">Metadata</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <TagList label="CVEs" items={signal.cve_ids || []} />
+            <TagList label="CVEs" items={signal.cve_ids || []} linkPrefix="https://nvd.nist.gov/vuln/detail/" />
             <TagList label="Threat Actors" items={signal.threat_actors || []} />
             <TagList label="Affected Products" items={signal.affected_products || []} />
             <TagList label="Target Industries" items={signal.target_industries || []} />

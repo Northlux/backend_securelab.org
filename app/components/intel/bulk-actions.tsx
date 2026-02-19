@@ -17,7 +17,7 @@ export function BulkActions({
 
   return (
     <div className="flex items-center gap-3 px-4 py-3 bg-brand-500/10 border border-brand-500/20 rounded-lg animate-in fade-in">
-      <span className="text-sm font-500 text-brand-300">
+      <span className="text-sm font-medium text-brand-300">
         {count} selected
       </span>
 
@@ -25,7 +25,7 @@ export function BulkActions({
         <button
           onClick={() => onAction('approve')}
           disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-500 bg-green-500/15 text-green-400 hover:bg-green-500/25 transition-all disabled:opacity-50"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-green-500/15 text-green-400 hover:bg-green-500/25 transition-all disabled:opacity-50"
         >
           <CheckCircle size={14} />
           Approve All
@@ -33,7 +33,7 @@ export function BulkActions({
         <button
           onClick={() => onAction('reject')}
           disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-500 bg-red-500/15 text-red-400 hover:bg-red-500/25 transition-all disabled:opacity-50"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-red-500/15 text-red-400 hover:bg-red-500/25 transition-all disabled:opacity-50"
         >
           <XCircle size={14} />
           Reject All
@@ -41,7 +41,7 @@ export function BulkActions({
         <button
           onClick={() => onAction('feature')}
           disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-500 bg-yellow-500/15 text-yellow-400 hover:bg-yellow-500/25 transition-all disabled:opacity-50"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-yellow-500/15 text-yellow-400 hover:bg-yellow-500/25 transition-all disabled:opacity-50"
         >
           <Star size={14} />
           Feature

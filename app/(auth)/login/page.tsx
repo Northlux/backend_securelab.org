@@ -58,7 +58,7 @@ export default function LoginPage() {
 
         {/* Email Input */}
         <div className="space-y-2">
-          <label htmlFor="email" className="block text-sm font-500 text-slate-300">
+          <label htmlFor="email" className="block text-sm font-medium text-slate-300">
             User
           </label>
           <input
@@ -75,7 +75,7 @@ export default function LoginPage() {
 
         {/* Password Input */}
         <div className="space-y-2">
-          <label htmlFor="password" className="block text-sm font-500 text-slate-300">
+          <label htmlFor="password" className="block text-sm font-medium text-slate-300">
             Password
           </label>
           <input
@@ -94,7 +94,7 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-500 rounded-lg transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          className="w-full py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-medium rounded-lg transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           {loading && <Loader2 size={18} className="animate-spin" />}
           {loading ? 'Signing in...' : 'Sign In'}

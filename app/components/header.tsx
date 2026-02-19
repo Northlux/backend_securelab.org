@@ -48,7 +48,8 @@ function Breadcrumbs() {
 
       // If there's a third segment (e.g., /admin/intel/[id])
       if (segments.length >= 3) {
-        crumbs.push({ label: segments[2]!.slice(0, 8) + '…', href: pathname })
+        const subLabel = segments[1] === 'intel' ? 'Signal Detail' : segments[2]!.slice(0, 8) + '…'
+        crumbs.push({ label: subLabel, href: pathname })
       }
     }
   }

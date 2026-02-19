@@ -97,7 +97,7 @@ function ScoreBadge({ label, score }: { label: string; score: number | null }) {
   return (
     <span className="flex items-center gap-1 text-xs">
       <span className="text-slate-500">{label}</span>
-      <span className={`font-600 ${color}`}>{score}</span>
+      <span className={`font-semibold ${color}`}>{score}</span>
     </span>
   )
 }
@@ -146,7 +146,7 @@ export function SignalCard({
           <div className="flex items-start gap-3 mb-2">
             <Link
               href={`/admin/intel/${signal.id}`}
-              className="text-sm font-600 text-slate-100 hover:text-brand-400 transition-colors leading-tight flex-1 min-w-0"
+              className="text-sm font-semibold text-slate-100 hover:text-brand-400 transition-colors leading-tight flex-1 min-w-0"
             >
               {signal.title}
             </Link>
@@ -169,7 +169,7 @@ export function SignalCard({
           <div className="flex items-center gap-2 flex-wrap">
             {/* Category */}
             <span
-              className={`px-2 py-0.5 rounded text-xs font-500 ${
+              className={`px-2 py-0.5 rounded text-xs font-medium ${
                 CATEGORY_COLORS[signal.signal_category] || 'bg-slate-500/15 text-slate-400'
               }`}
             >
@@ -178,7 +178,7 @@ export function SignalCard({
 
             {/* Severity */}
             <span
-              className={`px-2 py-0.5 rounded text-xs font-500 border ${
+              className={`px-2 py-0.5 rounded text-xs font-medium border ${
                 SEVERITY_COLORS[signal.severity] || 'bg-slate-500/15 text-slate-400 border-slate-500/20'
               }`}
             >
@@ -187,7 +187,7 @@ export function SignalCard({
 
             {/* Triage status */}
             <span
-              className={`px-2 py-0.5 rounded text-xs font-500 ${
+              className={`px-2 py-0.5 rounded text-xs font-medium ${
                 STATUS_COLORS[status] || 'bg-slate-500/15 text-slate-400'
               }`}
             >
@@ -222,24 +222,24 @@ export function SignalCard({
           </div>
         </div>
 
-        {/* Quick actions */}
+        {/* Quick actions — always visible on mobile, hover-reveal on desktop */}
         {(status === 'pending' || status === 'review') && (
-          <div className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="flex flex-col sm:flex-row items-center gap-1 flex-shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
             <button
               onClick={() => handleAction('approve')}
               disabled={acting}
-              className="p-1.5 rounded-md text-green-500 hover:bg-green-500/10 transition-all disabled:opacity-50"
+              className="p-2.5 sm:p-1.5 rounded-md text-green-500 hover:bg-green-500/10 active:bg-green-500/20 transition-all disabled:opacity-50 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center"
               title="Approve"
             >
-              <CheckCircle size={18} />
+              <CheckCircle size={20} className="sm:w-[18px] sm:h-[18px]" />
             </button>
             <button
               onClick={() => handleAction('reject')}
               disabled={acting}
-              className="p-1.5 rounded-md text-red-500 hover:bg-red-500/10 transition-all disabled:opacity-50"
+              className="p-2.5 sm:p-1.5 rounded-md text-red-500 hover:bg-red-500/10 active:bg-red-500/20 transition-all disabled:opacity-50 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center"
               title="Reject"
             >
-              <XCircle size={18} />
+              <XCircle size={20} className="sm:w-[18px] sm:h-[18px]" />
             </button>
           </div>
         )}

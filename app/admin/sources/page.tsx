@@ -218,7 +218,7 @@ export default function SourcesPage() {
               {/* Info */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-500 text-slate-200 truncate">
+                  <span className="text-sm font-medium text-slate-200 truncate">
                     {source.name}
                   </span>
                   <span className={`px-1.5 py-0.5 text-xs rounded ${TYPE_COLORS[source.source_type] || 'bg-slate-500/15 text-slate-400'}`}>
@@ -315,7 +315,7 @@ function AddSourceModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm">
       <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-600 text-slate-100">Add Source</h2>
+          <h2 className="text-lg font-semibold text-slate-100">Add Source</h2>
           <button
             onClick={onClose}
             className="p-1 text-slate-500 hover:text-slate-300 transition-colors"
@@ -326,7 +326,7 @@ function AddSourceModal({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <label className="block text-sm font-500 text-slate-300">Name</label>
+            <label className="block text-sm font-medium text-slate-300">Name</label>
             <input
               type="text"
               value={name}
@@ -338,7 +338,7 @@ function AddSourceModal({
           </div>
 
           <div className="space-y-2">
-            <label className="block text-sm font-500 text-slate-300">URL</label>
+            <label className="block text-sm font-medium text-slate-300">URL</label>
             <input
               type="url"
               value={url}
@@ -349,7 +349,7 @@ function AddSourceModal({
           </div>
 
           <div className="space-y-2">
-            <label className="block text-sm font-500 text-slate-300">Type</label>
+            <label className="block text-sm font-medium text-slate-300">Type</label>
             <select
               value={sourceType}
               onChange={(e) => setSourceType(e.target.value)}
@@ -365,14 +365,14 @@ function AddSourceModal({
           <div className="flex items-center gap-3 pt-2">
             <button
               type="submit"
-              className="flex-1 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-500 rounded-lg transition-all text-sm"
+              className="flex-1 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-medium rounded-lg transition-all text-sm"
             >
               Add Source
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 text-sm font-500 text-slate-400 hover:text-slate-200 bg-slate-800 border border-slate-700 rounded-lg hover:border-slate-600 transition-all"
+              className="px-4 py-2.5 text-sm font-medium text-slate-400 hover:text-slate-200 bg-slate-800 border border-slate-700 rounded-lg hover:border-slate-600 transition-all"
             >
               Cancel
             </button>

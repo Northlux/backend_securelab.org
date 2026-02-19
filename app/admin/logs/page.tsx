@@ -7,14 +7,15 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import {
   RefreshCw,
   CheckCircle,
   XCircle,
   AlertTriangle,
-  Clock,
   Download,
   Filter,
+  Inbox,
 } from 'lucide-react'
 
 interface LogEntry {
@@ -61,12 +62,13 @@ export default function LogsPage() {
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('')
 
-  const fetchLogs = async () => {
+  const fetchLogs = async (filter?: string) => {
     setLoading(true)
     try {
       const params = new URLSearchParams()
       params.set('limit', '100')
-      if (statusFilter) params.set('status', statusFilter)
+      const f = filter ?? statusFilter
+      if (f) params.set('status', f)
 
       const res = await fetch(`/api/v1/admin/logs?${params.toString()}`)
       const json = await res.json()
@@ -78,7 +80,21 @@ export default function LogsPage() {
   }
 
   useEffect(() => {
-    fetchLogs()
+    const doFetch = async () => {
+      setLoading(true)
+      try {
+        const params = new URLSearchParams()
+        params.set('limit', '100')
+        if (statusFilter) params.set('status', statusFilter)
+        const res = await fetch(`/api/v1/admin/logs?${params.toString()}`)
+        const json = await res.json()
+        setLogs(json.data || [])
+      } catch {
+        // silent
+      }
+      setLoading(false)
+    }
+    doFetch()
   }, [statusFilter])
 
   // Stats
@@ -96,8 +112,8 @@ export default function LogsPage() {
           </p>
         </div>
         <button
-          onClick={fetchLogs}
-          className="flex items-center gap-2 px-3 py-2 text-xs font-500 text-slate-400 hover:text-slate-200 bg-slate-800/40 border border-slate-800 rounded-lg hover:border-slate-700 transition-all"
+          onClick={() => fetchLogs()}
+          className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-slate-400 hover:text-slate-200 bg-slate-800/40 border border-slate-800 rounded-lg hover:border-slate-700 transition-all"
         >
           <RefreshCw size={14} />
           Refresh
@@ -108,15 +124,15 @@ export default function LogsPage() {
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="bg-slate-800/40 border border-slate-800 rounded-lg p-4">
           <div className="text-xs text-slate-500 uppercase tracking-wide mb-2">Successful</div>
-          <div className="text-2xl font-600 text-green-400">{successCount}</div>
+          <div className="text-2xl font-semibold text-green-400">{successCount}</div>
         </div>
         <div className="bg-slate-800/40 border border-slate-800 rounded-lg p-4">
           <div className="text-xs text-slate-500 uppercase tracking-wide mb-2">Errors</div>
-          <div className="text-2xl font-600 text-red-400">{errorCount}</div>
+          <div className="text-2xl font-semibold text-red-400">{errorCount}</div>
         </div>
         <div className="bg-slate-800/40 border border-slate-800 rounded-lg p-4">
           <div className="text-xs text-slate-500 uppercase tracking-wide mb-2">Signals Imported</div>
-          <div className="text-2xl font-600 text-brand-400">{totalImported}</div>
+          <div className="text-2xl font-semibold text-brand-400">{totalImported}</div>
         </div>
       </div>
 
@@ -141,9 +157,19 @@ export default function LogsPage() {
             <RefreshCw size={20} className="text-slate-600 animate-spin" />
           </div>
         ) : logs.length === 0 ? (
-          <div className="text-center py-16">
-            <Clock size={32} className="text-slate-700 mx-auto mb-4" />
-            <p className="text-sm text-slate-500">No ingestion logs found.</p>
+          <div className="bg-slate-800/40 border border-slate-800 rounded-lg p-12 text-center">
+            <Inbox size={40} className="text-slate-700 mx-auto mb-4" />
+            <h3 className="text-sm font-medium text-slate-300 mb-2">No ingestion logs yet</h3>
+            <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed mb-4">
+              Logs appear here when the ingestion pipeline processes sources.
+              {statusFilter ? ' Try clearing your filter to see all logs.' : ' Configure sources and run the pipeline to start collecting signals.'}
+            </p>
+            <Link
+              href="/admin"
+              className="inline-flex items-center gap-1.5 text-xs text-brand-400 hover:text-brand-300 transition-colors"
+            >
+              Go to Dashboard →
+            </Link>
           </div>
         ) : (
           logs.map((log) => {
@@ -161,7 +187,7 @@ export default function LogsPage() {
                 {/* Info */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-500 text-slate-200">
+                    <span className="text-sm font-medium text-slate-200">
                       {log.source_id ? log.source_id.slice(0, 8) : 'Unknown'}
                     </span>
                     <span className={`px-1.5 py-0.5 text-xs rounded ${style.color}`}>
