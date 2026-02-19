@@ -1,21 +1,26 @@
 import { Settings } from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
 
 export default function SettingsPage() {
   return (
-    <>
-      <div className="mb-8">
-        <h1 className="text-3xl font-600 text-slate-100 mb-1">Settings</h1>
-        <p className="text-sm text-slate-500">System configuration and preferences</p>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold text-slate-100">Settings</h1>
+        <p className="text-sm text-slate-500 mt-1">System configuration and preferences</p>
       </div>
 
-      <div className="flex flex-col items-center justify-center py-20 bg-slate-800/40 border border-slate-800 rounded-lg">
-        <Settings size={48} className="text-slate-700 mb-4" />
-        <h2 className="text-lg font-600 text-slate-400 mb-2">Coming Soon</h2>
-        <p className="text-sm text-slate-500 max-w-md text-center">
-          Email configuration, billing settings, security options,
-          and system preferences.
-        </p>
-      </div>
-    </>
+      <Card className="bg-slate-800/40 border-slate-800">
+        <CardContent className="flex flex-col items-center justify-center py-20">
+          <div className="w-14 h-14 rounded-full bg-slate-800 flex items-center justify-center mb-4">
+            <Settings size={28} className="text-slate-600" />
+          </div>
+          <h2 className="text-lg font-semibold text-slate-300 mb-1">Coming Soon</h2>
+          <p className="text-sm text-slate-500 max-w-md text-center">
+            Email configuration, billing settings, security options,
+            and system preferences.
+          </p>
+        </CardContent>
+      </Card>
+    </div>
   )
 }

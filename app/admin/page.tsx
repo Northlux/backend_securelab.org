@@ -3,8 +3,6 @@
  *
  * Displays live stats from Supabase: signal counts, triage status,
  * source health, ingestion activity, and pipeline throughput.
- *
- * Data fetched from: GET /api/v1/admin/dashboard
  */
 'use client'
 
@@ -20,6 +18,10 @@ import {
   Activity,
   RefreshCw,
 } from 'lucide-react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
 
 interface DashboardData {
   signals: {
@@ -89,6 +91,26 @@ function timeAgo(dateStr: string): string {
   return `${days}d ago`
 }
 
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-8">
+      <div className="space-y-2">
+        <Skeleton className="h-8 w-40 bg-slate-800" />
+        <Skeleton className="h-4 w-64 bg-slate-800/60" />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-32 bg-slate-800/40" />
+        ))}
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Skeleton className="lg:col-span-2 h-64 bg-slate-800/40" />
+        <Skeleton className="h-64 bg-slate-800/40" />
+      </div>
+    </div>
+  )
+}
+
 export default function AdminPage() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -109,45 +131,42 @@ export default function AdminPage() {
 
   useEffect(() => {
     fetchData()
-    // Auto-refresh every 60s
     const interval = setInterval(() => fetchData(), 60000)
     return () => clearInterval(interval)
   }, [])
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <RefreshCw size={20} className="text-slate-600 animate-spin" />
-      </div>
-    )
-  }
+  if (loading) return <DashboardSkeleton />
 
   if (!data) {
     return (
-      <div className="text-center py-20">
-        <AlertTriangle size={32} className="text-slate-600 mx-auto mb-4" />
+      <div className="flex flex-col items-center justify-center py-20 space-y-4">
+        <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center">
+          <AlertTriangle size={24} className="text-slate-500" />
+        </div>
         <p className="text-slate-500">Failed to load dashboard data.</p>
+        <Button variant="outline" onClick={() => fetchData()} className="border-slate-700 text-slate-400">
+          <RefreshCw size={14} className="mr-2" />
+          Retry
+        </Button>
       </div>
     )
   }
 
-  // Top categories sorted by count
   const topCategories = Object.entries(data.signals.byCategory)
     .sort(([, a], [, b]) => b - a)
     .slice(0, 8)
 
-  // Signals per day for sparkline (last 7 days)
   const days = Object.entries(data.pipeline.signalsPerDay)
     .sort(([a], [b]) => a.localeCompare(b))
   const maxPerDay = Math.max(...days.map(([, v]) => v), 1)
 
   return (
-    <>
+    <div className="space-y-8">
       {/* Page Header */}
-      <div className="flex items-center justify-between mb-10">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-600 text-slate-100 mb-1">Dashboard</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-2xl font-semibold text-slate-100">Dashboard</h1>
+          <p className="text-sm text-slate-500 mt-1">
             Real-time platform overview
             {data.pipeline.lastSignalAt && (
               <span className="ml-2 text-slate-600">
@@ -156,29 +175,31 @@ export default function AdminPage() {
             )}
           </p>
         </div>
-        <button
+        <Button
+          variant="outline"
+          size="sm"
           onClick={() => fetchData(true)}
           disabled={refreshing}
-          className="flex items-center gap-2 px-3 py-2 text-xs font-500 text-slate-400 hover:text-slate-200 bg-slate-800/40 border border-slate-800 rounded-lg hover:border-slate-700 transition-all disabled:opacity-50"
+          className="border-slate-700 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
         >
-          <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
+          <RefreshCw size={14} className={`mr-2 ${refreshing ? 'animate-spin' : ''}`} />
           Refresh
-        </button>
+        </Button>
       </div>
 
       {/* Primary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-10">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           label="Total Signals"
           value={data.signals.total.toLocaleString()}
-          icon={<Database size={20} />}
+          icon={<Database size={18} />}
           detail={`+${data.signals.last24h} last 24h`}
           detailColor={data.signals.last24h > 0 ? 'text-green-400' : 'text-slate-600'}
         />
         <StatCard
           label="Pending Review"
           value={(data.triage.pending + data.triage.review).toLocaleString()}
-          icon={<Clock size={20} />}
+          icon={<Clock size={18} />}
           detail={`${data.triage.review} flagged for review`}
           detailColor="text-yellow-400"
           href="/admin/intel?status=pending"
@@ -186,7 +207,7 @@ export default function AdminPage() {
         <StatCard
           label="Approved"
           value={data.triage.approved.toLocaleString()}
-          icon={<CheckCircle size={20} />}
+          icon={<CheckCircle size={18} />}
           detail={`${data.triage.rejected} rejected`}
           detailColor="text-green-400"
           href="/admin/intel?status=approved"
@@ -194,7 +215,7 @@ export default function AdminPage() {
         <StatCard
           label="Active Sources"
           value={data.sources.active.toLocaleString()}
-          icon={<Radio size={20} />}
+          icon={<Radio size={18} />}
           detail={`${data.sources.total} total · ${data.sources.inactive} inactive`}
           detailColor="text-slate-500"
           href="/admin/sources"
@@ -202,147 +223,153 @@ export default function AdminPage() {
       </div>
 
       {/* Two-column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
-
-        {/* Signal volume (last 7 days) */}
-        <div className="lg:col-span-2 bg-slate-800/40 border border-slate-800 rounded-lg p-6 hover:bg-slate-800/60 transition-all duration-150">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-sm font-600 text-slate-100">Signal Volume</h2>
-              <p className="text-xs text-slate-500 mt-1">Last 7 days · {data.signals.last7d} signals</p>
-            </div>
-            <TrendingUp size={16} className="text-slate-600" />
-          </div>
-
-          {/* Bar chart */}
-          <div className="flex items-end gap-2 h-32">
-            {days.map(([day, count]) => (
-              <div key={day} className="flex-1 flex flex-col items-center gap-2">
-                <span className="text-xs text-slate-500">{count}</span>
-                <div
-                  className="w-full bg-brand-500/30 rounded-t transition-all duration-300 hover:bg-brand-500/50"
-                  style={{ height: `${(count / maxPerDay) * 100}%`, minHeight: '4px' }}
-                />
-                <span className="text-xs text-slate-600">
-                  {new Date(day).toLocaleDateString('en-GB', { weekday: 'short' })}
-                </span>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Signal volume */}
+        <Card className="lg:col-span-2 bg-slate-800/40 border-slate-800 hover:bg-slate-800/60 transition-colors">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-sm font-semibold text-slate-100">Signal Volume</CardTitle>
+                <p className="text-xs text-slate-500 mt-1">Last 7 days · {data.signals.last7d} signals</p>
               </div>
-            ))}
-          </div>
-        </div>
+              <TrendingUp size={16} className="text-slate-600" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-end gap-2 h-32">
+              {days.map(([day, count]) => (
+                <div key={day} className="flex-1 flex flex-col items-center gap-2">
+                  <span className="text-xs text-slate-500">{count}</span>
+                  <div
+                    className="w-full bg-brand-500/30 rounded-t transition-all duration-300 hover:bg-brand-500/50"
+                    style={{ height: `${(count / maxPerDay) * 100}%`, minHeight: '4px' }}
+                  />
+                  <span className="text-[10px] text-slate-600">
+                    {new Date(day).toLocaleDateString('en-GB', { weekday: 'short' })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Severity distribution */}
-        <div className="bg-slate-800/40 border border-slate-800 rounded-lg p-6 hover:bg-slate-800/60 transition-all duration-150">
-          <h2 className="text-sm font-600 text-slate-100 mb-6">Severity Distribution</h2>
-          <div className="space-y-3">
+        <Card className="bg-slate-800/40 border-slate-800 hover:bg-slate-800/60 transition-colors">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold text-slate-100">Severity Distribution</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
             {Object.entries(data.signals.bySeverity)
               .sort(([, a], [, b]) => b - a)
               .map(([sev, count]) => {
                 const pct = Math.round((count / data.signals.total) * 100)
                 return (
-                  <div key={sev} className="space-y-1">
+                  <div key={sev} className="space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-500 text-slate-400 capitalize">{sev}</span>
+                      <span className="text-xs font-medium text-slate-400 capitalize">{sev}</span>
                       <span className="text-xs text-slate-500">{count} ({pct}%)</span>
                     </div>
                     <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
                       <div
-                        className={`h-full rounded-full ${SEVERITY_COLORS[sev] || 'bg-slate-500'}`}
+                        className={`h-full rounded-full transition-all duration-500 ${SEVERITY_COLORS[sev] || 'bg-slate-500'}`}
                         style={{ width: `${pct}%` }}
                       />
                     </div>
                   </div>
                 )
               })}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Bottom row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Top categories */}
-        <div className="bg-slate-800/40 border border-slate-800 rounded-lg p-6 hover:bg-slate-800/60 transition-all duration-150">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-sm font-600 text-slate-100">Top Categories</h2>
-              <p className="text-xs text-slate-500 mt-1">{Object.keys(data.signals.byCategory).length} categories tracked</p>
+        <Card className="bg-slate-800/40 border-slate-800 hover:bg-slate-800/60 transition-colors">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-sm font-semibold text-slate-100">Top Categories</CardTitle>
+                <p className="text-xs text-slate-500 mt-1">{Object.keys(data.signals.byCategory).length} categories tracked</p>
+              </div>
+              <Link
+                href="/admin/intel"
+                className="text-xs text-brand-400 hover:text-brand-300 transition-colors"
+              >
+                View all →
+              </Link>
             </div>
-            <Link
-              href="/admin/intel"
-              className="text-xs text-brand-400 hover:text-brand-300 transition-colors"
-            >
-              View all →
-            </Link>
-          </div>
-          <div className="space-y-3">
+          </CardHeader>
+          <CardContent className="space-y-2">
             {topCategories.map(([cat, count]) => (
               <div
                 key={cat}
-                className="flex items-center justify-between p-3 bg-slate-900/40 rounded-lg border border-slate-800/50 hover:border-slate-700/50 transition-all duration-150"
+                className="flex items-center justify-between p-2.5 bg-slate-900/40 rounded-lg border border-slate-800/50 hover:border-slate-700/50 transition-colors"
               >
-                <span className={`text-sm font-500 ${CATEGORY_COLORS[cat] || 'text-slate-300'}`}>
+                <span className={`text-sm font-medium ${CATEGORY_COLORS[cat] || 'text-slate-300'}`}>
                   {cat.replace('_', ' ')}
                 </span>
-                <span className="text-sm font-600 text-slate-400">{count}</span>
+                <Badge variant="secondary" className="bg-slate-800 text-slate-400 border-0 text-xs">
+                  {count}
+                </Badge>
               </div>
             ))}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
         {/* Pipeline status */}
-        <div className="bg-slate-800/40 border border-slate-800 rounded-lg p-6 hover:bg-slate-800/60 transition-all duration-150">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-sm font-600 text-slate-100">Pipeline Status</h2>
-              <p className="text-xs text-slate-500 mt-1">Triage & source health</p>
+        <Card className="bg-slate-800/40 border-slate-800 hover:bg-slate-800/60 transition-colors">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-sm font-semibold text-slate-100">Pipeline Status</CardTitle>
+                <p className="text-xs text-slate-500 mt-1">Triage & source health</p>
+              </div>
+              <Activity size={16} className="text-slate-600" />
             </div>
-            <Activity size={16} className="text-slate-600" />
-          </div>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {/* Triage funnel */}
+            <div className="space-y-2.5">
+              <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Triage Funnel</p>
+              <div className="grid grid-cols-4 gap-2">
+                <FunnelCard label="Pending" value={data.triage.pending} color="text-slate-400" />
+                <FunnelCard label="Review" value={data.triage.review} color="text-yellow-400" />
+                <FunnelCard label="Approved" value={data.triage.approved} color="text-green-400" />
+                <FunnelCard label="Rejected" value={data.triage.rejected} color="text-red-400" />
+              </div>
+            </div>
 
-          {/* Triage funnel */}
-          <div className="space-y-3 mb-6">
-            <div className="text-xs font-500 text-slate-500 uppercase tracking-wide">Triage Funnel</div>
-            <div className="grid grid-cols-4 gap-2">
-              <FunnelCard label="Pending" value={data.triage.pending} color="text-slate-400" />
-              <FunnelCard label="Review" value={data.triage.review} color="text-yellow-400" />
-              <FunnelCard label="Approved" value={data.triage.approved} color="text-green-400" />
-              <FunnelCard label="Rejected" value={data.triage.rejected} color="text-red-400" />
+            {/* Source types */}
+            <div className="space-y-2.5">
+              <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Source Types</p>
+              <div className="flex flex-wrap gap-1.5">
+                {Object.entries(data.sources.byType).map(([type, count]) => (
+                  <Badge key={type} variant="outline" className="border-slate-700 text-slate-400 text-xs">
+                    {type}: {count}
+                  </Badge>
+                ))}
+              </div>
             </div>
-          </div>
 
-          {/* Source types */}
-          <div className="space-y-3">
-            <div className="text-xs font-500 text-slate-500 uppercase tracking-wide">Source Types</div>
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(data.sources.byType).map(([type, count]) => (
-                <span
-                  key={type}
-                  className="px-2.5 py-1 text-xs bg-slate-900/60 border border-slate-800/50 rounded text-slate-400"
-                >
-                  {type}: {count}
-                </span>
-              ))}
+            {/* System health */}
+            <div className="space-y-2.5">
+              <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">System</p>
+              <div className="space-y-1.5">
+                <HealthRow label="Database" status="online" />
+                <HealthRow label="Scrapers" status={data.signals.last24h > 0 ? 'online' : 'idle'} />
+                <HealthRow label="Triage Pipeline" status={data.triage.total > 0 ? 'online' : 'idle'} />
+                <HealthRow
+                  label="Sources"
+                  status={data.sources.inactive > 10 ? 'warning' : 'online'}
+                  detail={`${data.sources.inactive} inactive`}
+                />
+              </div>
             </div>
-          </div>
-
-          {/* System health */}
-          <div className="mt-6 space-y-3">
-            <div className="text-xs font-500 text-slate-500 uppercase tracking-wide">System</div>
-            <div className="space-y-2">
-              <HealthRow label="Database" status="online" />
-              <HealthRow label="Scrapers" status={data.signals.last24h > 0 ? 'online' : 'idle'} />
-              <HealthRow label="Triage Pipeline" status={data.triage.total > 0 ? 'online' : 'idle'} />
-              <HealthRow
-                label="Sources"
-                status={data.sources.inactive > 10 ? 'warning' : 'online'}
-                detail={`${data.sources.inactive} inactive`}
-              />
-            </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
-    </>
+    </div>
   )
 }
 
@@ -364,33 +391,33 @@ function StatCard({
   href?: string
 }) {
   const inner = (
-    <div className="bg-slate-800/40 border border-slate-800 rounded-lg p-6 hover:bg-slate-800/60 hover:border-slate-700 transition-all duration-150 group">
-      <div className="flex items-start justify-between mb-6">
-        <div className="text-xs font-500 text-slate-400 uppercase tracking-wide">{label}</div>
-        <div className="text-slate-600 group-hover:text-slate-500 transition-colors opacity-70">
-          {icon}
+    <Card className="bg-slate-800/40 border-slate-800 hover:bg-slate-800/60 hover:border-slate-700 transition-all group cursor-default">
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between mb-4">
+          <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">{label}</p>
+          <div className="text-slate-600 group-hover:text-slate-500 transition-colors">
+            {icon}
+          </div>
         </div>
-      </div>
-      <div className="flex items-baseline gap-3">
-        <div className="text-3xl font-600 text-slate-100">{value}</div>
-      </div>
-      {detail && (
-        <div className={`text-xs mt-2 ${detailColor}`}>{detail}</div>
-      )}
-    </div>
+        <p className="text-2xl font-semibold text-slate-100">{value}</p>
+        {detail && (
+          <p className={`text-xs mt-1.5 ${detailColor}`}>{detail}</p>
+        )}
+      </CardContent>
+    </Card>
   )
 
   if (href) {
-    return <Link href={href}>{inner}</Link>
+    return <Link href={href} className="block">{inner}</Link>
   }
   return inner
 }
 
 function FunnelCard({ label, value, color }: { label: string; value: number; color: string }) {
   return (
-    <div className="text-center p-3 bg-slate-900/40 rounded-lg border border-slate-800/50">
-      <div className={`text-lg font-600 ${color}`}>{value}</div>
-      <div className="text-xs text-slate-500 mt-1">{label}</div>
+    <div className="text-center p-2.5 bg-slate-900/40 rounded-lg border border-slate-800/50">
+      <div className={`text-lg font-semibold ${color}`}>{value}</div>
+      <div className="text-[10px] text-slate-500 mt-0.5">{label}</div>
     </div>
   )
 }
@@ -412,12 +439,12 @@ function HealthRow({
   }[status]
 
   return (
-    <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900/40 border border-slate-800/50">
-      <span className="text-sm text-slate-400">{label}</span>
+    <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-900/40 border border-slate-800/50">
+      <span className="text-xs text-slate-400">{label}</span>
       <div className="flex items-center gap-2">
-        {detail && <span className="text-xs text-slate-600">{detail}</span>}
-        <div className={`w-2 h-2 rounded-full ${dotColor} ${status === 'online' ? 'animate-pulse' : ''}`} />
-        <span className="text-xs text-slate-500 font-500">{status}</span>
+        {detail && <span className="text-[10px] text-slate-600">{detail}</span>}
+        <div className={`w-1.5 h-1.5 rounded-full ${dotColor} ${status === 'online' ? 'animate-pulse' : ''}`} />
+        <span className="text-[10px] text-slate-500 font-medium">{status}</span>
       </div>
     </div>
   )

@@ -88,10 +88,10 @@ export default function LogsPage() {
 
   return (
     <>
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-600 text-slate-100 mb-1">Ingestion Logs</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-2xl font-semibold text-slate-100">Ingestion Logs</h1>
+          <p className="text-sm text-slate-500 mt-1">
             Pipeline activity · {logs.length} entries · {totalImported} signals imported
           </p>
         </div>

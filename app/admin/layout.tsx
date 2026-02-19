@@ -18,13 +18,13 @@ export default async function AdminLayout({
       <Sidebar />
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Header */}
         <Header userEmail={user?.email} />
 
         {/* Page Content */}
-        <main className="flex-1 overflow-auto">
-          <div className="p-8">
+        <main className="flex-1 overflow-auto" role="main">
+          <div className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8 max-w-7xl mx-auto">
             {children}
           </div>
         </main>

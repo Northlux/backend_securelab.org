@@ -137,16 +137,16 @@ export default function SourcesPage() {
   return (
     <>
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-600 text-slate-100 mb-1">Source Management</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-2xl font-semibold text-slate-100">Source Management</h1>
+          <p className="text-sm text-slate-500 mt-1">
             {sources.length} sources · {activeCount} active
           </p>
         </div>
         <button
           onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-500 bg-brand-600 hover:bg-brand-700 text-white rounded-lg transition-all"
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white rounded-lg transition-all"
         >
           <Plus size={16} />
           Add Source

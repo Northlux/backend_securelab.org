@@ -2,6 +2,44 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  :root {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 199 89% 48%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 199 89% 48%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+    --radius: 0.5rem;
+    --sidebar-background: 222.2 84% 4.9%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 199 89% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 217.2 32.6% 17.5%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 217.2 32.6% 17.5%;
+    --sidebar-ring: 199 89% 48%;
+  }
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -15,41 +53,34 @@ html {
 }
 
 body {
-  background-color: #0f172a;
+  @apply bg-slate-950 text-slate-400;
   background-image:
     radial-gradient(circle at 100% 0%, rgba(14, 165, 233, 0.02) 0%, transparent 50%),
     radial-gradient(circle at 0% 100%, rgba(14, 165, 233, 0.02) 0%, transparent 50%);
-  color: #64748b;
   font-family: system-ui, -apple-system, sans-serif;
   font-size: 14px;
   line-height: 1.5;
 }
 
-/* Typography */
+/* Typography — light text for dark backgrounds */
 h1, h2, h3, h4, h5, h6 {
   font-weight: 600;
   line-height: 1.2;
-  color: #0f172a;
+  @apply text-slate-100;
 }
 
 a {
-  color: #0284c7;
-  text-decoration: none;
-  transition: color 150ms ease;
+  @apply text-brand-500 no-underline transition-colors duration-150;
 }
-
 a:hover {
-  color: #0369a1;
+  @apply text-brand-400;
 }
 
-/* Form Elements */
+/* Form Elements — light text on dark inputs */
 input,
 textarea,
 select {
-  background-color: #1e293b;
-  border: 1px solid #334155;
-  border-radius: 6px;
-  color: #0f172a;
+  @apply bg-slate-800 border border-slate-700 rounded-md text-slate-200;
   padding: 8px 12px;
   font-family: inherit;
   font-size: 14px;
@@ -58,46 +89,38 @@ select {
 
 input::placeholder,
 textarea::placeholder {
-  color: #94a3b8;
+  @apply text-slate-500;
 }
 
 input:hover,
 textarea:hover,
 select:hover {
-  border-color: #475569;
+  @apply border-slate-600;
 }
 
 input:focus,
 textarea:focus,
 select:focus {
-  outline: none;
-  border-color: #0284c7;
-  background-color: #192030;
-  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.1);
+  @apply outline-none border-brand-500 bg-slate-850 ring-2 ring-brand-500/20;
 }
 
 /* Code */
 code {
-  background-color: #1e293b;
-  color: #0284c7;
+  @apply bg-slate-800 text-brand-400 rounded;
   padding: 2px 6px;
-  border-radius: 4px;
   font-family: 'Monaco', 'Menlo', monospace;
   font-size: 13px;
 }
 
 pre {
-  background-color: #1e293b;
-  border: 1px solid #334155;
-  border-radius: 8px;
+  @apply bg-slate-800 border border-slate-700 rounded-lg;
   padding: 16px;
   overflow-x: auto;
   margin: 16px 0;
 }
 
 pre code {
-  background: none;
-  color: #cbd5e1;
+  @apply bg-transparent text-slate-300;
   padding: 0;
 }
 
@@ -110,30 +133,25 @@ button {
 
 /* Selection */
 ::selection {
-  background-color: #0284c7;
-  color: white;
-}
-
-::-moz-selection {
-  background-color: #0284c7;
-  color: white;
+  @apply bg-brand-500 text-white;
 }
 
 /* Scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
-
 ::-webkit-scrollbar-track {
-  background: #0f172a;
+  @apply bg-slate-950;
 }
-
 ::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 4px;
+  @apply bg-slate-700 rounded;
+}
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-slate-600;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+/* Focus visible for keyboard navigation */
+*:focus-visible {
+  @apply outline-none ring-2 ring-brand-500/50 ring-offset-2 ring-offset-slate-950;
 }
