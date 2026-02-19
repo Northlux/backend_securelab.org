@@ -129,19 +129,32 @@ export function IntelQueue() {
     }
   }
 
-  const handleBulkAction = async (action: string) => {
+  const [bulkRejectModal, setBulkRejectModal] = useState(false)
+
+  const handleBulkAction = async (action: string, rejectionReason?: string) => {
     if (selected.size === 0) return
+
+    // Intercept bulk reject to show reason modal
+    if (action === 'reject' && !rejectionReason) {
+      setBulkRejectModal(true)
+      return
+    }
+
     setBulkLoading(true)
     try {
+      const body: Record<string, unknown> = { action, ids: Array.from(selected) }
+      if (rejectionReason) body.rejection_reason = rejectionReason
+
       const res = await fetch('/api/v1/admin/signals/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, ids: Array.from(selected) }),
+        body: JSON.stringify(body),
       })
       const json = await res.json()
       if (json.success) {
         showToast('success', `${json.updated} signals updated`)
         setSelected(new Set())
+        setBulkRejectModal(false)
         fetchSignals()
         fetchStats()
       } else {
@@ -242,11 +255,20 @@ export function IntelQueue() {
         </div>
       )}
 
-      {/* Rejection reason modal */}
+      {/* Rejection reason modal (single) */}
       {rejectModal && (
         <RejectModal
           onClose={() => setRejectModal(null)}
           onSubmit={(reason) => handleAction(rejectModal, 'reject', reason)}
+        />
+      )}
+
+      {/* Rejection reason modal (bulk) */}
+      {bulkRejectModal && (
+        <RejectModal
+          title={`Reject ${selected.size} signals`}
+          onClose={() => setBulkRejectModal(false)}
+          onSubmit={(reason) => handleBulkAction('reject', reason)}
         />
       )}
 
@@ -273,9 +295,11 @@ const REJECTION_REASONS = [
 function RejectModal({
   onClose,
   onSubmit,
+  title,
 }: {
   onClose: () => void
   onSubmit: (reason: string) => void
+  title?: string
 }) {
   const [reason, setReason] = useState('')
   const [custom, setCustom] = useState('')
@@ -283,7 +307,7 @@ function RejectModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm">
       <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl">
-        <h2 className="text-lg font-600 text-slate-100 mb-4">Why reject this signal?</h2>
+        <h2 className="text-lg font-600 text-slate-100 mb-4">{title || 'Why reject this signal?'}</h2>
         <p className="text-xs text-slate-500 mb-4">This helps Carter learn your preferences and improve future scoring.</p>
 
         <div className="space-y-2 mb-4 max-h-48 overflow-y-auto">
