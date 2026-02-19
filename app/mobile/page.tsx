@@ -10,6 +10,8 @@ import {
   RefreshCw,
   Filter,
   X,
+  CheckSquare,
+  Square,
 } from 'lucide-react'
 
 interface TriageResult {
@@ -104,9 +106,12 @@ export default function MobileTriage() {
   const [filter, setFilter] = useState<string>('pending')
   const [showFilters, setShowFilters] = useState(false)
   const [acting, setActing] = useState<string | null>(null)
-  const [rejectTarget, setRejectTarget] = useState<string | null>(null)
+  const [rejectTarget, setRejectTarget] = useState<string | null>(null) // single signal id or 'bulk'
   const [toast, setToast] = useState<{ type: string; msg: string } | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [selectMode, setSelectMode] = useState(false)
+  const [bulkActing, setBulkActing] = useState(false)
 
   const showToast = (type: string, msg: string) => {
     setToast({ type, msg })
@@ -129,6 +134,7 @@ export default function MobileTriage() {
       showToast('error', 'Failed to load')
     }
     setLoading(false)
+    setSelected(new Set())
   }, [filter, page])
 
   useEffect(() => {
@@ -176,6 +182,54 @@ export default function MobileTriage() {
     setActing(null)
   }
 
+  const handleBulkAction = async (action: 'approve' | 'reject', reason?: string) => {
+    if (selected.size === 0) return
+    setBulkActing(true)
+    try {
+      const body: Record<string, unknown> = {
+        action,
+        ids: Array.from(selected),
+      }
+      if (reason) body.rejection_reason = reason
+
+      const res = await fetch('/api/v1/admin/signals/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const json = await res.json()
+      if (json.success) {
+        showToast('success', `${json.updated} signals ${action}d`)
+        setSignals(prev => prev.filter(s => !selected.has(s.id)))
+        setSelected(new Set())
+        setSelectMode(false)
+        setRejectTarget(null)
+      } else {
+        showToast('error', json.errors?.[0] || 'Failed')
+      }
+    } catch {
+      showToast('error', 'Network error')
+    }
+    setBulkActing(false)
+  }
+
+  const toggleSelect = (id: string) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (selected.size === signals.length) {
+      setSelected(new Set())
+    } else {
+      setSelected(new Set(signals.map(s => s.id)))
+    }
+  }
+
   const statusCounts: Record<string, string> = {
     all: 'All',
     pending: 'Pending',
@@ -183,6 +237,8 @@ export default function MobileTriage() {
     approved: 'Approved',
     rejected: 'Rejected',
   }
+
+  const allSelected = signals.length > 0 && selected.size === signals.length
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -194,6 +250,16 @@ export default function MobileTriage() {
             <p className="text-xs text-slate-500">{total} signals · Page {page}/{totalPages}</p>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => { setSelectMode(!selectMode); setSelected(new Set()) }}
+              className={`p-2 rounded-lg border transition-all ${
+                selectMode
+                  ? 'bg-brand-500/15 border-brand-500/30 text-brand-400'
+                  : 'bg-slate-800/50 border-slate-700/50 text-slate-400'
+              }`}
+            >
+              <CheckSquare size={18} />
+            </button>
             <button
               onClick={() => setShowFilters(!showFilters)}
               className={`p-2 rounded-lg border transition-all ${
@@ -232,6 +298,40 @@ export default function MobileTriage() {
             ))}
           </div>
         )}
+
+        {/* Select mode bar */}
+        {selectMode && (
+          <div className="flex items-center gap-2 mt-3">
+            <button
+              onClick={toggleSelectAll}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800/60 border border-slate-700/50 text-slate-300 active:bg-slate-700/50"
+            >
+              {allSelected ? <CheckSquare size={14} /> : <Square size={14} />}
+              {allSelected ? 'Deselect all' : 'Select all'}
+            </button>
+            {selected.size > 0 && (
+              <>
+                <span className="text-xs text-slate-500">{selected.size} selected</span>
+                <div className="flex items-center gap-1.5 ml-auto">
+                  <button
+                    onClick={() => handleBulkAction('approve')}
+                    disabled={bulkActing}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-500/15 text-green-400 border border-green-500/30 active:bg-green-500/25 disabled:opacity-30"
+                  >
+                    ✓ Approve
+                  </button>
+                  <button
+                    onClick={() => setRejectTarget('bulk')}
+                    disabled={bulkActing}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-500/15 text-red-400 border border-red-500/30 active:bg-red-500/25 disabled:opacity-30"
+                  >
+                    ✗ Reject
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Signal list */}
@@ -250,59 +350,84 @@ export default function MobileTriage() {
             const status = getStatus(signal)
             const expanded = expandedId === signal.id
             const isActing = acting === signal.id
+            const isSelected = selected.has(signal.id)
 
             return (
               <div
                 key={signal.id}
-                className="bg-slate-900/80 border border-slate-800/60 rounded-xl overflow-hidden"
+                className={`bg-slate-900/80 border rounded-xl overflow-hidden transition-all ${
+                  isSelected
+                    ? 'border-brand-500/50 bg-brand-500/5'
+                    : 'border-slate-800/60'
+                }`}
               >
-                {/* Card content — tap to expand */}
+                {/* Card content */}
                 <button
                   className="w-full text-left px-4 py-3 active:bg-slate-800/40 transition-colors"
-                  onClick={() => setExpandedId(expanded ? null : signal.id)}
+                  onClick={() => {
+                    if (selectMode) {
+                      toggleSelect(signal.id)
+                    } else {
+                      setExpandedId(expanded ? null : signal.id)
+                    }
+                  }}
                 >
-                  {/* Title */}
-                  <p className="text-sm font-semibold text-slate-100 leading-snug mb-1.5">
-                    {signal.title}
-                  </p>
-
-                  {/* Tags row */}
-                  <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border ${SEVERITY_COLORS[signal.severity] || ''}`}>
-                      {signal.severity}
-                    </span>
-                    <span className={`text-[10px] font-medium ${CATEGORY_COLORS[signal.signal_category] || 'text-slate-400'}`}>
-                      {signal.signal_category}
-                    </span>
-                    {triage && (
-                      <div className="flex items-center gap-1.5 ml-auto">
-                        <ScorePill label="K" score={triage.kimi_score} />
-                        <ScorePill label="O" score={triage.openai_score} />
+                  <div className="flex items-start gap-3">
+                    {/* Checkbox in select mode */}
+                    {selectMode && (
+                      <div className="pt-0.5 flex-shrink-0">
+                        {isSelected ? (
+                          <CheckSquare size={20} className="text-brand-400" />
+                        ) : (
+                          <Square size={20} className="text-slate-600" />
+                        )}
                       </div>
                     )}
-                  </div>
 
-                  {/* Date + status */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-slate-600">
-                      {formatDate(signal.source_date || signal.created_at)}
-                    </span>
-                    {status !== 'pending' && (
-                      <span className={`text-[10px] font-medium ${
-                        status === 'approved' ? 'text-green-400' :
-                        status === 'rejected' ? 'text-red-400' :
-                        'text-yellow-400'
-                      }`}>
-                        {status}
-                      </span>
-                    )}
+                    <div className="flex-1 min-w-0">
+                      {/* Title */}
+                      <p className="text-sm font-semibold text-slate-100 leading-snug mb-1.5">
+                        {signal.title}
+                      </p>
+
+                      {/* Tags row */}
+                      <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border ${SEVERITY_COLORS[signal.severity] || ''}`}>
+                          {signal.severity}
+                        </span>
+                        <span className={`text-[10px] font-medium ${CATEGORY_COLORS[signal.signal_category] || 'text-slate-400'}`}>
+                          {signal.signal_category}
+                        </span>
+                        {triage && (
+                          <div className="flex items-center gap-1.5 ml-auto">
+                            <ScorePill label="K" score={triage.kimi_score} />
+                            <ScorePill label="O" score={triage.openai_score} />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Date + status */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-slate-600">
+                          {formatDate(signal.source_date || signal.created_at)}
+                        </span>
+                        {status !== 'pending' && (
+                          <span className={`text-[10px] font-medium ${
+                            status === 'approved' ? 'text-green-400' :
+                            status === 'rejected' ? 'text-red-400' :
+                            'text-yellow-400'
+                          }`}>
+                            {status}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </button>
 
                 {/* Expanded details */}
-                {expanded && (
+                {expanded && !selectMode && (
                   <div className="px-4 pb-3 space-y-2 border-t border-slate-800/40">
-                    {/* Summary */}
                     {signal.summary && (
                       <p className="text-xs text-slate-400 leading-relaxed pt-2">
                         {signal.summary.slice(0, 300)}
@@ -310,7 +435,6 @@ export default function MobileTriage() {
                       </p>
                     )}
 
-                    {/* Polished content */}
                     {triage?.polished_content && (
                       <div className="bg-slate-800/40 rounded-lg p-3">
                         <p className="text-[10px] text-slate-500 font-medium mb-1">AI POLISHED</p>
@@ -321,7 +445,6 @@ export default function MobileTriage() {
                       </div>
                     )}
 
-                    {/* Source link */}
                     {signal.source_url && (
                       <a
                         href={signal.source_url}
@@ -336,8 +459,8 @@ export default function MobileTriage() {
                   </div>
                 )}
 
-                {/* Action buttons — always visible */}
-                {(status === 'pending' || status === 'review') && (
+                {/* Action buttons — only in non-select mode */}
+                {!selectMode && (status === 'pending' || status === 'review') && (
                   <div className="flex border-t border-slate-800/40">
                     <button
                       onClick={(e) => { e.stopPropagation(); handleApprove(signal.id) }}
@@ -386,12 +509,16 @@ export default function MobileTriage() {
         </div>
       )}
 
-      {/* Reject modal */}
+      {/* Reject modal — works for single and bulk */}
       {rejectTarget && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/80 backdrop-blur-sm">
-          <div className="w-full max-w-lg bg-slate-900 border-t border-slate-800 rounded-t-2xl p-5 pb-8 animate-in slide-in-from-bottom">
+          <div className="w-full max-w-lg bg-slate-900 border-t border-slate-800 rounded-t-2xl p-5 pb-8">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-bold text-slate-100">Rejection reason</h2>
+              <h2 className="text-base font-bold text-slate-100">
+                {rejectTarget === 'bulk'
+                  ? `Reject ${selected.size} signals`
+                  : 'Rejection reason'}
+              </h2>
               <button
                 onClick={() => setRejectTarget(null)}
                 className="p-1.5 rounded-lg text-slate-500 active:bg-slate-800"
@@ -403,8 +530,14 @@ export default function MobileTriage() {
               {REJECTION_REASONS.map((reason) => (
                 <button
                   key={reason}
-                  onClick={() => handleReject(rejectTarget, reason)}
-                  disabled={acting === rejectTarget}
+                  onClick={() => {
+                    if (rejectTarget === 'bulk') {
+                      handleBulkAction('reject', reason)
+                    } else {
+                      handleReject(rejectTarget, reason)
+                    }
+                  }}
+                  disabled={bulkActing || acting !== null}
                   className="w-full text-left px-4 py-3 text-sm rounded-xl bg-slate-800/60 border border-slate-700/50 text-slate-300 active:bg-red-500/10 active:border-red-500/30 active:text-red-400 transition-all disabled:opacity-30"
                 >
                   {reason}

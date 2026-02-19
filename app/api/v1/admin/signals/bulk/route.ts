@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
 
   if (action === 'approve' || action === 'reject' || action === 'review') {
     const status = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'review'
+    const rejectionReason = body.rejection_reason || null
 
     for (const id of ids) {
       // Check if triage result exists
@@ -35,17 +36,26 @@ export async function POST(request: NextRequest) {
         .eq('signal_id', id)
         .single()
 
+      const triageData: Record<string, unknown> = {
+        triage_status: status,
+        updated_at: new Date().toISOString(),
+        reviewed_at: new Date().toISOString(),
+        reviewed_by: 'admin',
+      }
+      if (rejectionReason) triageData.rejection_reason = rejectionReason
+
       if (existing) {
         const { error } = await supabase
           .from('triage_results')
-          .update({ triage_status: status, updated_at: new Date().toISOString() })
+          .update(triageData)
           .eq('signal_id', id)
         if (error) errors.push(`${id}: ${error.message}`)
         else updated++
       } else {
+        triageData.signal_id = id
         const { error } = await supabase
           .from('triage_results')
-          .insert({ signal_id: id, triage_status: status })
+          .insert(triageData)
         if (error) errors.push(`${id}: ${error.message}`)
         else updated++
       }
