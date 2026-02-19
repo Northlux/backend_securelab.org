@@ -258,6 +258,7 @@ export function IntelQueue() {
 const REJECTION_REASONS = [
   'Product review / comparison',
   'Vendor marketing / PR',
+  'Sponsored webinar / vendor event',
   'Listicle / best-of article',
   'Not cybersecurity relevant',
   'Duplicate content',
