@@ -16,7 +16,7 @@ import {
   RefreshCw,
   AlertTriangle,
 } from 'lucide-react'
-import { showToast, ToastContainer } from '@/app/components/intel/toast'
+import { toast } from 'sonner'
 
 interface TriageResult {
   id: string
@@ -175,7 +175,7 @@ export default function SignalDetailPage() {
         const json = await res.json()
         setSignal(json.data)
       } catch {
-        showToast('error', 'Failed to load signal')
+        toast.error( 'Failed to load signal')
       }
       setLoading(false)
     }
@@ -202,16 +202,16 @@ export default function SignalDetailPage() {
       })
 
       if (res.ok) {
-        showToast('success', `Signal ${action}d`)
+        toast.success( `Signal ${action}d`)
         // Reload
         const reload = await fetch(`/api/v1/admin/signals/${signalId}`)
         const json = await reload.json()
         setSignal(json.data)
       } else {
-        showToast('error', `Failed to ${action}`)
+        toast.error( `Failed to ${action}`)
       }
     } catch {
-      showToast('error', 'Network error')
+      toast.error( 'Network error')
     }
     setActing(false)
   }
@@ -447,7 +447,6 @@ export default function SignalDetailPage() {
         </div>
       )}
 
-      <ToastContainer />
     </div>
   )
 }

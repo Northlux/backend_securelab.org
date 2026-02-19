@@ -1,4 +1,9 @@
+import type { Metadata } from 'next'
 import { Suspense } from 'react'
+
+export const metadata: Metadata = {
+  title: 'Intel Management — Securelab Admin',
+}
 import { IntelQueue } from '@/app/components/intel/intel-queue'
 import { Skeleton } from '@/components/ui/skeleton'
 

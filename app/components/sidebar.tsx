@@ -1,8 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { useState } from 'react'
+import { usePathname, useSearchParams, useRouter } from 'next/navigation'
+import { useState, useMemo } from 'react'
 import {
   ChevronDown,
   LayoutDashboard,
@@ -11,7 +11,6 @@ import {
   Lock,
   Settings,
   LogOut,
-  Menu,
   Search,
   Shield,
   Radio,
@@ -19,7 +18,7 @@ import {
 } from 'lucide-react'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Button } from '@/components/ui/button'
+import { getSupabaseClient } from '@/lib/supabase/client'
 
 interface MenuItem {
   label: string
@@ -101,13 +100,36 @@ function isActive(pathname: string, href: string): boolean {
 
 function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const [searchQuery, setSearchQuery] = useState('')
+  const [loggingOut, setLoggingOut] = useState(false)
   const [expandedMenu, setExpandedMenu] = useState<string | null>(() => {
-    // Auto-expand the menu that matches current path
     const match = menuItems.find(
       (item) => item.subItems && isActive(pathname, item.href)
     )
     return match?.label ?? null
   })
+
+  const currentSearch = searchParams.toString() ? `?${searchParams.toString()}` : ''
+
+  const filteredMenuItems = useMemo(() => {
+    if (!searchQuery.trim()) return menuItems
+    const q = searchQuery.toLowerCase()
+    return menuItems.filter((item) => {
+      if (item.label.toLowerCase().includes(q)) return true
+      if (item.subItems?.some((sub) => sub.label.toLowerCase().includes(q))) return true
+      return false
+    })
+  }, [searchQuery])
+
+  const handleLogout = async () => {
+    setLoggingOut(true)
+    const supabase = getSupabaseClient()
+    await supabase.auth.signOut()
+    router.push('/login')
+    router.refresh()
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -124,7 +146,7 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
         </Link>
       </div>
 
-      {/* Search */}
+      {/* Search — filters sidebar nav items */}
       <div className="p-4 border-b border-slate-800/50 flex-shrink-0">
         <div className="relative">
           <Search size={14} className="absolute left-3 top-2.5 text-slate-500" />
@@ -132,6 +154,8 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
             type="text"
             placeholder="Search..."
             aria-label="Search navigation"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-8 pr-3 py-2 text-xs bg-slate-800/60 border border-slate-700/50 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 transition-all"
           />
         </div>
@@ -140,7 +164,7 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
       {/* Navigation */}
       <ScrollArea className="flex-1 py-4">
         <nav aria-label="Main navigation" className="px-3 space-y-0.5">
-          {menuItems.map((item) => {
+          {filteredMenuItems.map((item) => {
             const active = isActive(pathname, item.href)
             const hasSubItems = item.subItems && item.subItems.length > 0
             const isExpanded = expandedMenu === item.label
@@ -186,8 +210,8 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
                 {hasSubItems && isExpanded && (
                   <div className="ml-4 mt-0.5 space-y-0.5 border-l border-slate-800/50 pl-3">
                     {item.subItems?.map((subItem) => {
-                      const subActive = pathname + window.location.search === subItem.href ||
-                        (subItem.href === item.href && pathname === item.href.split('?')[0] && !window.location.search)
+                      const subActive = pathname + currentSearch === subItem.href ||
+                        (subItem.href === item.href && pathname === item.href.split('?')[0] && !searchParams.toString())
                       return (
                         <Link
                           key={subItem.href}
@@ -221,35 +245,26 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
           <Settings size={16} />
           <span>Settings</span>
         </Link>
-        <button className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-500 hover:text-red-400 hover:bg-red-950/20 rounded-lg transition-all duration-150">
+        <button
+          onClick={handleLogout}
+          disabled={loggingOut}
+          className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-500 hover:text-red-400 hover:bg-red-950/20 rounded-lg transition-all duration-150 disabled:opacity-50"
+        >
           <LogOut size={16} />
-          <span>Logout</span>
+          <span>{loggingOut ? 'Signing out...' : 'Logout'}</span>
         </button>
       </div>
     </div>
   )
 }
 
-export function Sidebar() {
-  const [sheetOpen, setSheetOpen] = useState(false)
-
+export function Sidebar({ mobileOpen, onMobileOpenChange }: { mobileOpen: boolean; onMobileOpenChange: (open: boolean) => void }) {
   return (
     <>
-      {/* Mobile hamburger button */}
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={() => setSheetOpen(true)}
-        className="fixed top-4 left-4 z-50 lg:hidden text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
-        aria-label="Open navigation menu"
-      >
-        <Menu size={20} />
-      </Button>
-
       {/* Mobile sidebar (Sheet) */}
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+      <Sheet open={mobileOpen} onOpenChange={onMobileOpenChange}>
         <SheetContent side="left" className="w-64 p-0 bg-slate-900 border-slate-800">
-          <SidebarNav onNavigate={() => setSheetOpen(false)} />
+          <SidebarNav onNavigate={() => onMobileOpenChange(false)} />
         </SheetContent>
       </Sheet>
 

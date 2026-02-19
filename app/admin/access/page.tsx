@@ -1,5 +1,11 @@
+import type { Metadata } from 'next'
 import { Lock } from 'lucide-react'
+import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
+
+export const metadata: Metadata = {
+  title: 'Access Control — Securelab Admin',
+}
 
 export default function AccessControlPage() {
   return (
@@ -15,10 +21,16 @@ export default function AccessControlPage() {
             <Lock size={28} className="text-slate-600" />
           </div>
           <h2 className="text-lg font-semibold text-slate-300 mb-1">Coming Soon</h2>
-          <p className="text-sm text-slate-500 max-w-md text-center">
+          <p className="text-sm text-slate-500 max-w-md text-center mb-4">
             Access policies, app permissions, and audit logging will be
             available alongside the subscription system.
           </p>
+          <Link
+            href="/admin"
+            className="text-sm text-brand-400 hover:text-brand-300 transition-colors"
+          >
+            Go to Dashboard →
+          </Link>
         </CardContent>
       </Card>
     </div>

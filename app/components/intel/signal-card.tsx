@@ -224,7 +224,7 @@ export function SignalCard({
 
         {/* Quick actions — always visible on mobile, hover-reveal on desktop */}
         {(status === 'pending' || status === 'review') && (
-          <div className="flex flex-col sm:flex-row items-center gap-1 flex-shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+          <div className="flex flex-col sm:flex-row items-center gap-1 flex-shrink-0">
             <button
               onClick={() => handleAction('approve')}
               disabled={acting}

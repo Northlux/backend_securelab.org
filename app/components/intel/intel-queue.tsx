@@ -6,7 +6,14 @@ import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
 import { SignalCard } from './signal-card'
 import { SignalFilters } from './signal-filters'
 import { BulkActions } from './bulk-actions'
-import { ToastContainer, showToast } from './toast'
+import { toast } from 'sonner'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog'
 
 interface TriageResult {
   id: string
@@ -65,7 +72,7 @@ export function IntelQueue() {
       setSignals(json.data || [])
       setPagination(json.pagination || null)
     } catch {
-      showToast('error', 'Failed to load signals')
+      toast.error( 'Failed to load signals')
     }
     setLoading(false)
   }, [searchParams])
@@ -117,15 +124,15 @@ export function IntelQueue() {
         body: JSON.stringify(body),
       })
       if (res.ok) {
-        showToast('success', `Signal ${action}d`)
+        toast.success( `Signal ${action}d`)
         setRejectModal(null)
         fetchSignals()
         fetchStats()
       } else {
-        showToast('error', `Failed to ${action} signal`)
+        toast.error( `Failed to ${action} signal`)
       }
     } catch {
-      showToast('error', 'Network error')
+      toast.error( 'Network error')
     }
   }
 
@@ -152,16 +159,16 @@ export function IntelQueue() {
       })
       const json = await res.json()
       if (json.success) {
-        showToast('success', `${json.updated} signals updated`)
+        toast.success( `${json.updated} signals updated`)
         setSelected(new Set())
         setBulkRejectModal(false)
         fetchSignals()
         fetchStats()
       } else {
-        showToast('error', json.errors?.[0] || 'Bulk action failed')
+        toast.error( json.errors?.[0] || 'Bulk action failed')
       }
     } catch {
-      showToast('error', 'Network error')
+      toast.error( 'Network error')
     }
     setBulkLoading(false)
   }
@@ -215,7 +222,13 @@ export function IntelQueue() {
           </div>
         ) : signals.length === 0 ? (
           <div className="text-center py-16">
-            <p className="text-sm text-slate-500">No signals match your filters.</p>
+            <p className="text-sm text-slate-500 mb-3">No signals match your filters.</p>
+            <button
+              onClick={() => router.push('/admin/intel')}
+              className="text-xs text-brand-400 hover:text-brand-300 transition-colors"
+            >
+              Clear filters
+            </button>
           </div>
         ) : (
           signals.map((signal) => (
@@ -256,23 +269,20 @@ export function IntelQueue() {
       )}
 
       {/* Rejection reason modal (single) */}
-      {rejectModal && (
-        <RejectModal
-          onClose={() => setRejectModal(null)}
-          onSubmit={(reason) => handleAction(rejectModal, 'reject', reason)}
-        />
-      )}
+      <RejectModal
+        open={!!rejectModal}
+        onClose={() => setRejectModal(null)}
+        onSubmit={(reason) => handleAction(rejectModal!, 'reject', reason)}
+      />
 
       {/* Rejection reason modal (bulk) */}
-      {bulkRejectModal && (
-        <RejectModal
-          title={`Reject ${selected.size} signals`}
-          onClose={() => setBulkRejectModal(false)}
-          onSubmit={(reason) => handleBulkAction('reject', reason)}
-        />
-      )}
+      <RejectModal
+        open={bulkRejectModal}
+        title={`Reject ${selected.size} signals`}
+        onClose={() => setBulkRejectModal(false)}
+        onSubmit={(reason) => handleBulkAction('reject', reason)}
+      />
 
-      <ToastContainer />
     </div>
   )
 }
@@ -293,10 +303,12 @@ const REJECTION_REASONS = [
 ]
 
 function RejectModal({
+  open,
   onClose,
   onSubmit,
   title,
 }: {
+  open: boolean
   onClose: () => void
   onSubmit: (reason: string) => void
   title?: string
@@ -305,10 +317,14 @@ function RejectModal({
   const [custom, setCustom] = useState('')
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm">
-      <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl">
-        <h2 className="text-lg font-semibold text-slate-100 mb-4">{title || 'Why reject this signal?'}</h2>
-        <p className="text-xs text-slate-500 mb-4">This helps Carter learn your preferences and improve future scoring.</p>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose() }}>
+      <DialogContent className="max-w-sm bg-slate-900 border-slate-800">
+        <DialogHeader>
+          <DialogTitle className="text-slate-100">{title || 'Why reject this signal?'}</DialogTitle>
+          <DialogDescription className="text-xs text-slate-500">
+            This helps Carter learn your preferences and improve future scoring.
+          </DialogDescription>
+        </DialogHeader>
 
         <div className="space-y-2 mb-4 max-h-48 overflow-y-auto">
           {REJECTION_REASONS.map((r) => (
@@ -351,8 +367,8 @@ function RejectModal({
             Cancel
           </button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 

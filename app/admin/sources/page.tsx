@@ -17,13 +17,18 @@ import {
   Play,
   Trash2,
   ExternalLink,
-  X,
   Rss,
   Globe,
   Code,
   FileText,
 } from 'lucide-react'
-import { showToast, ToastContainer } from '@/app/components/intel/toast'
+import { toast } from 'sonner'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 interface Source {
   id: string
@@ -70,7 +75,7 @@ export default function SourcesPage() {
       const json = await res.json()
       setSources(json.data || [])
     } catch {
-      showToast('error', 'Failed to load sources')
+      toast.error( 'Failed to load sources')
     }
     setLoading(false)
   }, [search, typeFilter, activeFilter])
@@ -87,11 +92,11 @@ export default function SourcesPage() {
         body: JSON.stringify({ is_active: !source.is_active }),
       })
       if (res.ok) {
-        showToast('success', `${source.name} ${source.is_active ? 'disabled' : 'enabled'}`)
+        toast.success( `${source.name} ${source.is_active ? 'disabled' : 'enabled'}`)
         fetchSources()
       }
     } catch {
-      showToast('error', 'Failed to update source')
+      toast.error( 'Failed to update source')
     }
   }
 
@@ -102,11 +107,11 @@ export default function SourcesPage() {
         method: 'DELETE',
       })
       if (res.ok) {
-        showToast('success', `${source.name} deleted`)
+        toast.success( `${source.name} deleted`)
         fetchSources()
       }
     } catch {
-      showToast('error', 'Failed to delete source')
+      toast.error( 'Failed to delete source')
     }
   }
 
@@ -118,15 +123,15 @@ export default function SourcesPage() {
         body: JSON.stringify(data),
       })
       if (res.ok) {
-        showToast('success', `${data.name} added`)
+        toast.success( `${data.name} added`)
         setShowAddModal(false)
         fetchSources()
       } else {
         const json = await res.json()
-        showToast('error', json.error || 'Failed to add source')
+        toast.error( json.error || 'Failed to add source')
       }
     } catch {
-      showToast('error', 'Network error')
+      toast.error( 'Network error')
     }
   }
 
@@ -198,7 +203,14 @@ export default function SourcesPage() {
         ) : sources.length === 0 ? (
           <div className="text-center py-16">
             <Radio size={32} className="text-slate-700 mx-auto mb-4" />
-            <p className="text-sm text-slate-500">No sources found.</p>
+            <p className="text-sm text-slate-500 mb-3">No sources found.</p>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white rounded-lg transition-all"
+            >
+              <Plus size={16} />
+              Add Source
+            </button>
           </div>
         ) : (
           sources.map((source) => (
@@ -243,7 +255,7 @@ export default function SourcesPage() {
               </div>
 
               {/* Actions */}
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="flex items-center gap-1">
                 <button
                   onClick={() => toggleActive(source)}
                   className={`p-2 rounded-md transition-all ${
@@ -280,14 +292,12 @@ export default function SourcesPage() {
       </div>
 
       {/* Add source modal */}
-      {showAddModal && (
-        <AddSourceModal
-          onClose={() => setShowAddModal(false)}
-          onSubmit={addSource}
-        />
-      )}
+      <AddSourceModal
+        open={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onSubmit={addSource}
+      />
 
-      <ToastContainer />
     </>
   )
 }
@@ -295,9 +305,11 @@ export default function SourcesPage() {
 // --- Add Source Modal ---
 
 function AddSourceModal({
+  open,
   onClose,
   onSubmit,
 }: {
+  open: boolean
   onClose: () => void
   onSubmit: (data: { name: string; url: string; source_type: string }) => void
 }) {
@@ -312,17 +324,11 @@ function AddSourceModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm">
-      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-semibold text-slate-100">Add Source</h2>
-          <button
-            onClick={onClose}
-            className="p-1 text-slate-500 hover:text-slate-300 transition-colors"
-          >
-            <X size={18} />
-          </button>
-        </div>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose() }}>
+      <DialogContent className="max-w-md bg-slate-900 border-slate-800">
+        <DialogHeader>
+          <DialogTitle className="text-slate-100">Add Source</DialogTitle>
+        </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
@@ -378,7 +384,7 @@ function AddSourceModal({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }

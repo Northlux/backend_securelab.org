@@ -46,6 +46,15 @@ export default function LoginPage() {
 
   return (
     <div className="space-y-6">
+      {/* Branding */}
+      <div className="text-center space-y-2">
+        <div className="inline-flex items-center justify-center w-12 h-12 rounded-lg bg-gradient-to-br from-brand-500 to-brand-600 text-white font-bold text-lg">
+          S
+        </div>
+        <h1 className="text-2xl font-semibold text-slate-100">Sign In</h1>
+        <p className="text-sm text-slate-500">Securelab Admin Portal</p>
+      </div>
+
       {/* Form */}
       <form onSubmit={handleLogin} className="space-y-4">
         {/* Error Alert */}

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { Bell, ChevronDown, ChevronRight, LogOut } from 'lucide-react'
+import { Bell, ChevronDown, ChevronRight, LogOut, Menu } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { getSupabaseClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -18,6 +18,7 @@ import {
 
 interface HeaderProps {
   userEmail?: string | null
+  onMenuClick?: () => void
 }
 
 const ROUTE_LABELS: Record<string, string> = {
@@ -35,7 +36,6 @@ function Breadcrumbs() {
   const pathname = usePathname()
   const segments = pathname.split('/').filter(Boolean)
 
-  // Build breadcrumb trail
   const crumbs: { label: string; href: string }[] = []
 
   if (segments.length >= 1 && segments[0] === 'admin') {
@@ -46,7 +46,6 @@ function Breadcrumbs() {
       const label = ROUTE_LABELS[path] || segments[1]!.charAt(0).toUpperCase() + segments[1]!.slice(1)
       crumbs.push({ label, href: path })
 
-      // If there's a third segment (e.g., /admin/intel/[id])
       if (segments.length >= 3) {
         const subLabel = segments[1] === 'intel' ? 'Signal Detail' : segments[2]!.slice(0, 8) + '…'
         crumbs.push({ label: subLabel, href: pathname })
@@ -75,7 +74,7 @@ function Breadcrumbs() {
   )
 }
 
-export function Header({ userEmail }: HeaderProps) {
+export function Header({ userEmail, onMenuClick }: HeaderProps) {
   const [loggingOut, setLoggingOut] = useState(false)
   const router = useRouter()
   const supabase = getSupabaseClient()
@@ -91,15 +90,25 @@ export function Header({ userEmail }: HeaderProps) {
 
   return (
     <header className="bg-slate-950/80 backdrop-blur-sm border-b border-slate-800/50 sticky top-0 z-30">
-      <div className="flex items-center justify-between px-6 lg:px-8 py-4">
-        {/* Breadcrumbs — left side, with left padding on mobile for hamburger */}
-        <div className="pl-10 lg:pl-0">
+      <div className="flex items-center justify-between px-4 sm:px-6 lg:px-8 py-4">
+        {/* Left side: hamburger + breadcrumbs */}
+        <div className="flex items-center gap-3">
+          {/* Mobile hamburger — inside the header, no overlap */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onMenuClick}
+            className="lg:hidden text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 flex-shrink-0"
+            aria-label="Open navigation menu"
+          >
+            <Menu size={20} />
+          </Button>
           <Breadcrumbs />
         </div>
 
         {/* Right side controls */}
         <div className="flex items-center gap-2">
-          {/* Notifications */}
+          {/* Notifications — bell only, no fake unread dot */}
           <Button
             variant="ghost"
             size="icon"
@@ -107,7 +116,6 @@ export function Header({ userEmail }: HeaderProps) {
             aria-label="Notifications"
           >
             <Bell size={18} />
-            <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-red-500 rounded-full" />
           </Button>
 
           {/* User Menu */}
