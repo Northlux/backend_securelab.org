@@ -14,8 +14,6 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
-import { useKeyboardShortcuts } from '@/lib/hooks/use-keyboard-shortcuts'
-import { KeyboardHelp } from '@/components/ui/keyboard-help'
 
 interface TriageResult {
   id: string
@@ -54,12 +52,6 @@ interface PaginationData {
   totalPages: number
 }
 
-interface UndoAction {
-  id: string
-  previousStatus: string
-  timestamp: number
-}
-
 export function IntelQueue() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -70,11 +62,6 @@ export function IntelQueue() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [bulkLoading, setBulkLoading] = useState(false)
-  
-  // Phase 1: Keyboard shortcuts & undo
-  const [currentIndex, setCurrentIndex] = useState(0)
-  const [undoStack, setUndoStack] = useState<UndoAction[]>([])
-  const [showHelp, setShowHelp] = useState(false)
 
   const fetchSignals = useCallback(async () => {
     setLoading(true)
@@ -85,7 +72,7 @@ export function IntelQueue() {
       setSignals(json.data || [])
       setPagination(json.pagination || null)
     } catch {
-      toast.error('Failed to load signals')
+      toast.error( 'Failed to load signals')
     }
     setLoading(false)
   }, [searchParams])
@@ -104,88 +91,6 @@ export function IntelQueue() {
     fetchSignals()
     fetchStats()
   }, [fetchSignals, fetchStats])
-
-  // Auto-advance helper
-  const advanceToNext = useCallback(() => {
-    if (currentIndex < signals.length - 1) {
-      setCurrentIndex(prev => prev + 1)
-      // Scroll to next signal
-      setTimeout(() => {
-        const nextCard = document.querySelector(`[data-signal-index="${currentIndex + 1}"]`)
-        nextCard?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      }, 100)
-    } else if (pagination && pagination.page < pagination.totalPages) {
-      // Load next page
-      goToPage(pagination.page + 1)
-      setCurrentIndex(0)
-    }
-  }, [currentIndex, signals.length, pagination])
-
-  // Undo last action
-  const handleUndo = useCallback(async () => {
-    if (undoStack.length === 0) {
-      toast.error('Nothing to undo')
-      return
-    }
-
-    const lastAction = undoStack[undoStack.length - 1]
-    if (!lastAction) {
-      toast.error('Nothing to undo')
-      return
-    }
-    
-    try {
-      const res = await fetch(`/api/v1/admin/signals/${lastAction.id}/undo`, {
-        method: 'POST',
-      })
-      
-      if (res.ok) {
-        toast.success('Action undone')
-        setUndoStack(prev => prev.slice(0, -1))
-        fetchSignals()
-        fetchStats()
-      } else {
-        toast.error('Failed to undo')
-      }
-    } catch {
-      toast.error('Network error')
-    }
-  }, [undoStack, fetchSignals, fetchStats])
-
-  // Keyboard shortcut handlers
-  useKeyboardShortcuts({
-    onNext: () => {
-      if (currentIndex < signals.length - 1) {
-        setCurrentIndex(prev => prev + 1)
-        const nextCard = document.querySelector(`[data-signal-index="${currentIndex + 1}"]`)
-        nextCard?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      }
-    },
-    onPrev: () => {
-      if (currentIndex > 0) {
-        setCurrentIndex(prev => prev - 1)
-        const prevCard = document.querySelector(`[data-signal-index="${currentIndex - 1}"]`)
-        prevCard?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      }
-    },
-    onApprove: () => {
-      if (signals[currentIndex]) {
-        handleAction(signals[currentIndex].id, 'approve')
-      }
-    },
-    onReject: () => {
-      if (signals[currentIndex]) {
-        setRejectModal(signals[currentIndex].id)
-      }
-    },
-    onUndo: handleUndo,
-    onHelp: () => setShowHelp(true),
-    onEscape: () => {
-      setShowHelp(false)
-      setRejectModal(null)
-      setBulkRejectModal(false)
-    },
-  }, !loading && signals.length > 0) // Only enable when signals are loaded
 
   const handleSelect = (id: string, checked: boolean) => {
     setSelected((prev) => {
@@ -218,34 +123,16 @@ export function IntelQueue() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      
       if (res.ok) {
-        // Add to undo stack
-        setUndoStack(prev => [
-          ...prev,
-          { id, previousStatus: 'pending', timestamp: Date.now() }
-        ].slice(-10)) // Keep last 10
-
-        // Show toast with undo option
-        toast.success(`Signal ${action}d`, {
-          action: {
-            label: 'Undo',
-            onClick: handleUndo,
-          },
-          duration: 10000, // 10 second grace period
-        })
-        
+        toast.success( `Signal ${action}d`)
         setRejectModal(null)
         fetchSignals()
         fetchStats()
-        
-        // Auto-advance to next signal
-        advanceToNext()
       } else {
-        toast.error(`Failed to ${action} signal`)
+        toast.error( `Failed to ${action} signal`)
       }
     } catch {
-      toast.error('Network error')
+      toast.error( 'Network error')
     }
   }
 
@@ -272,16 +159,16 @@ export function IntelQueue() {
       })
       const json = await res.json()
       if (json.success) {
-        toast.success(`${json.updated} signals updated`)
+        toast.success( `${json.updated} signals updated`)
         setSelected(new Set())
         setBulkRejectModal(false)
         fetchSignals()
         fetchStats()
       } else {
-        toast.error(json.errors?.[0] || 'Bulk action failed')
+        toast.error( json.errors?.[0] || 'Bulk action failed')
       }
     } catch {
-      toast.error('Network error')
+      toast.error( 'Network error')
     }
     setBulkLoading(false)
   }
@@ -290,7 +177,6 @@ export function IntelQueue() {
     const params = new URLSearchParams(searchParams.toString())
     params.set('page', page.toString())
     router.push(`/admin/intel?${params.toString()}`)
-    setCurrentIndex(0) // Reset to first signal on new page
   }
 
   return (
@@ -328,22 +214,6 @@ export function IntelQueue() {
         loading={bulkLoading}
       />
 
-      {/* Keyboard shortcut indicator */}
-      {!loading && signals.length > 0 && (
-        <div className="flex items-center justify-between px-4 py-2 bg-slate-800/40 border border-slate-800 rounded-lg">
-          <span className="text-xs text-slate-400">
-            Viewing signal {currentIndex + 1} of {signals.length}
-          </span>
-          <button
-            onClick={() => setShowHelp(true)}
-            className="text-xs text-brand-400 hover:text-brand-300 transition-colors flex items-center gap-1"
-          >
-            <kbd className="px-1.5 py-0.5 text-xs bg-slate-700 border border-slate-600 rounded">?</kbd>
-            Keyboard shortcuts
-          </button>
-        </div>
-      )}
-
       {/* Signal list */}
       <div className="space-y-3">
         {loading ? (
@@ -361,13 +231,11 @@ export function IntelQueue() {
             </button>
           </div>
         ) : (
-          signals.map((signal, index) => (
+          signals.map((signal) => (
             <SignalCard
               key={signal.id}
               signal={signal}
               selected={selected.has(signal.id)}
-              focused={index === currentIndex}
-              dataIndex={index}
               onSelect={handleSelect}
               onAction={handleAction}
             />
@@ -415,8 +283,6 @@ export function IntelQueue() {
         onSubmit={(reason) => handleBulkAction('reject', reason)}
       />
 
-      {/* Keyboard help overlay */}
-      <KeyboardHelp open={showHelp} onClose={() => setShowHelp(false)} />
     </div>
   )
 }
@@ -456,7 +322,7 @@ function RejectModal({
         <DialogHeader>
           <DialogTitle className="text-slate-100">{title || 'Why reject this signal?'}</DialogTitle>
           <DialogDescription className="text-xs text-slate-500">
-            This helps AI learn your preferences and improve future scoring.
+            This helps Carter learn your preferences and improve future scoring.
           </DialogDescription>
         </DialogHeader>
 
