@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createServerSupabaseClient } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,12 +8,12 @@ export const dynamic = 'force-dynamic'
  * List all sessions for a user
  */
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params
-    const supabase = await createClient()
+    const supabase = createServerSupabaseClient()
 
     // Check if user is admin
     const {
@@ -58,12 +58,12 @@ export async function GET(
  * Revoke all sessions for a user
  */
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params
-    const supabase = await createClient()
+    const supabase = createServerSupabaseClient()
 
     // Check if user is admin
     const {

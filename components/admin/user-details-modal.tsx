@@ -18,12 +18,8 @@ import { toast } from 'sonner'
 import {
   Shield,
   Clock,
-  Ban,
   Monitor,
   Activity,
-  AlertTriangle,
-  CheckCircle,
-  X,
 } from 'lucide-react'
 
 interface User {
