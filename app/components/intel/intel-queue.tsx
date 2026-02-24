@@ -6,7 +6,6 @@ import { ChevronLeft, ChevronRight, RefreshCw, Maximize2, Minimize2 } from 'luci
 import { SignalCard } from './signal-card'
 import { SignalFilters } from './signal-filters'
 import { BulkActions } from './bulk-actions'
-import { QuickFilters } from '@/components/ui/quick-filters'
 import { SessionStats } from '@/components/ui/session-stats'
 import { toast } from 'sonner'
 import {
@@ -334,9 +333,6 @@ export function IntelQueue() {
 
       {/* Filters */}
       <SignalFilters stats={stats} />
-
-      {/* Phase 2: Quick Filter Chips */}
-      <QuickFilters stats={stats} />
 
       {/* Bulk actions */}
       <BulkActions
