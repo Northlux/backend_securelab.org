@@ -9,6 +9,17 @@ const nextConfig = {
   poweredByHeader: false,
   // Output optimization for Vercel
   output: 'standalone',
+  // Allow images from R2 CDN
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'cdn.securelab.org',
+        port: '',
+        pathname: '/images/**',
+      },
+    ],
+  },
 }
 
 module.exports = nextConfig

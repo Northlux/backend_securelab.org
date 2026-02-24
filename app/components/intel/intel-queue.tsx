@@ -40,6 +40,7 @@ interface Signal {
   created_at: string
   is_featured: boolean
   is_verified: boolean
+  image_url: string | null
   triage_results: TriageResult[] | TriageResult | null
 }
 

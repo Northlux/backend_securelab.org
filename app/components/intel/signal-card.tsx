@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import {
   CheckCircle,
   XCircle,
@@ -9,6 +10,7 @@ import {
   Star,
   Clock,
   Shield,
+  ImageIcon,
 } from 'lucide-react'
 import { AIScoreExplanation } from '@/components/ui/ai-score-explanation'
 import {
@@ -38,6 +40,7 @@ interface Signal {
   created_at: string
   is_featured: boolean
   is_verified: boolean
+  image_url: string | null
   triage_results: TriageResult[] | TriageResult | null
 }
 
@@ -223,6 +226,24 @@ export function SignalCard({
               onChange={(e) => onSelect(signal.id, e.target.checked)}
               className={`${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} rounded border-slate-600 bg-slate-800 text-brand-500 focus:ring-brand-500/30 cursor-pointer`}
             />
+          </div>
+
+          {/* Image Thumbnail */}
+          <div className={`${compact ? 'w-12 h-12' : 'w-16 h-16'} flex-shrink-0 rounded-md overflow-hidden bg-slate-800/50 border border-slate-700/50`}>
+            {signal.image_url ? (
+              <Image
+                src={signal.image_url}
+                alt={signal.title}
+                width={compact ? 48 : 64}
+                height={compact ? 48 : 64}
+                className="w-full h-full object-cover"
+                unoptimized
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <ImageIcon size={compact ? 20 : 24} className="text-slate-600" />
+              </div>
+            )}
           </div>
 
           {/* Content */}
