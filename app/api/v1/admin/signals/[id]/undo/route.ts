@@ -3,11 +3,11 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 
 export async function POST(
   _request: Request,
-  { params }: { params: { id: string } }
+  props: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = createServerSupabaseClient()
-    const signalId = params.id
+    const { id: signalId } = await props.params
 
     // Get the current triage result
     const { data: currentTriage, error: fetchError } = await supabase

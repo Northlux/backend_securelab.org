@@ -105,6 +105,14 @@ export function IntelQueue() {
     fetchStats()
   }, [fetchSignals, fetchStats])
 
+  // Page navigation helper
+  const goToPage = useCallback((page: number) => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('page', page.toString())
+    router.push(`/admin/intel?${params.toString()}`)
+    setCurrentIndex(0) // Reset to first signal on new page
+  }, [searchParams, router])
+
   // Auto-advance helper
   const advanceToNext = useCallback(() => {
     if (currentIndex < signals.length - 1) {
@@ -119,7 +127,7 @@ export function IntelQueue() {
       goToPage(pagination.page + 1)
       setCurrentIndex(0)
     }
-  }, [currentIndex, signals.length, pagination])
+  }, [currentIndex, signals.length, pagination, goToPage])
 
   // Undo last action
   const handleUndo = useCallback(async () => {
@@ -284,13 +292,6 @@ export function IntelQueue() {
       toast.error('Network error')
     }
     setBulkLoading(false)
-  }
-
-  const goToPage = (page: number) => {
-    const params = new URLSearchParams(searchParams.toString())
-    params.set('page', page.toString())
-    router.push(`/admin/intel?${params.toString()}`)
-    setCurrentIndex(0) // Reset to first signal on new page
   }
 
   return (
