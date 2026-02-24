@@ -348,9 +348,28 @@ export function IntelQueue() {
       {/* Keyboard shortcut indicator & compact mode toggle */}
       {!loading && signals.length > 0 && (
         <div className="flex items-center justify-between px-4 py-2 bg-slate-800/40 border border-slate-800 rounded-lg">
-          <span className="text-xs text-slate-400">
-            Viewing signal {currentIndex + 1} of {signals.length}
-          </span>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 text-xs text-slate-400 hover:text-slate-200 transition-colors cursor-pointer">
+              <input
+                type="checkbox"
+                checked={signals.length > 0 && signals.every(s => selected.has(s.id))}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    // Select all signals on current page
+                    setSelected(new Set(signals.map(s => s.id)))
+                  } else {
+                    // Deselect all
+                    setSelected(new Set())
+                  }
+                }}
+                className="w-3.5 h-3.5 rounded border-slate-600 bg-slate-800 text-brand-500 focus:ring-brand-500/30 cursor-pointer"
+              />
+              Select all ({signals.length})
+            </label>
+            <span className="text-xs text-slate-400">
+              Viewing signal {currentIndex + 1} of {signals.length}
+            </span>
+          </div>
           <div className="flex items-center gap-3">
             <button
               onClick={() => setCompactMode(!compactMode)}
