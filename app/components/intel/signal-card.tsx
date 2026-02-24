@@ -11,6 +11,12 @@ import {
   Shield,
 } from 'lucide-react'
 import { AIScoreExplanation } from '@/components/ui/ai-score-explanation'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 interface TriageResult {
   id: string
@@ -93,6 +99,7 @@ export function SignalCard({
   signal,
   selected,
   focused = false,
+  compact = false,
   dataIndex,
   onSelect,
   onAction,
@@ -100,6 +107,7 @@ export function SignalCard({
   signal: Signal
   selected: boolean
   focused?: boolean
+  compact?: boolean
   dataIndex?: number
   onSelect: (id: string, checked: boolean) => void
   onAction: (id: string, action: string) => void
@@ -205,123 +213,153 @@ export function SignalCard({
         </>
       )}
 
-      <div className="p-5" style={swipeStyle}>
-        <div className="flex items-start gap-4">
+      <div className={compact ? 'p-2' : 'p-5'} style={swipeStyle}>
+        <div className="flex items-start gap-3">
           {/* Checkbox */}
-          <div className="pt-0.5 flex-shrink-0">
+          <div className={`${compact ? 'pt-0' : 'pt-0.5'} flex-shrink-0`}>
             <input
               type="checkbox"
               checked={selected}
               onChange={(e) => onSelect(signal.id, e.target.checked)}
-              className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-brand-500 focus:ring-brand-500/30 cursor-pointer"
+              className={`${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} rounded border-slate-600 bg-slate-800 text-brand-500 focus:ring-brand-500/30 cursor-pointer`}
             />
           </div>
 
           {/* Content */}
           <div className="flex-1 min-w-0">
-            {/* Title + badges row */}
-            <div className="flex items-start gap-3 mb-2">
-              <Link
-                href={`/admin/intel/${signal.id}`}
-                className="text-sm font-semibold text-slate-100 hover:text-brand-400 transition-colors leading-tight flex-1 min-w-0"
-              >
-                {signal.title}
-              </Link>
-              {signal.is_featured && (
-                <Star size={14} className="text-yellow-400 flex-shrink-0 fill-yellow-400" />
-              )}
-              {signal.is_verified && (
-                <Shield size={14} className="text-green-400 flex-shrink-0" />
-              )}
-            </div>
+            {compact ? (
+              // COMPACT MODE: Single-line layout with hover preview
+              <div className="flex items-center gap-2">
+                <TooltipProvider delayDuration={500}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Link
+                        href={`/admin/intel/${signal.id}`}
+                        className="text-sm font-medium text-slate-200 hover:text-brand-400 transition-colors leading-tight flex-1 min-w-0 truncate"
+                      >
+                        {signal.title}
+                      </Link>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-md p-3 bg-slate-900 border-slate-700">
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                        {triage?.polished_content?.slice(0, 400) || signal.summary?.slice(0, 400) || 'No summary available'}
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                
+                {/* Inline badges */}
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${CATEGORY_COLORS[signal.signal_category] || 'bg-slate-500/15 text-slate-400'}`}>
+                    {signal.signal_category}
+                  </span>
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium border ${SEVERITY_COLORS[signal.severity] || 'bg-slate-500/15 text-slate-400 border-slate-500/20'}`}>
+                    {signal.severity}
+                  </span>
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${STATUS_COLORS[status] || 'bg-slate-500/15 text-slate-400'}`}>
+                    {status}
+                  </span>
+                  {aiScore > 0 && (
+                    <AIScoreExplanation
+                      score={aiScore}
+                      signal={{
+                        signal_category: signal.signal_category,
+                        severity: signal.severity,
+                        source_url: signal.source_url ?? undefined,
+                        title: signal.title,
+                      }}
+                    />
+                  )}
+                  {signal.is_featured && <Star size={11} className="text-yellow-400 fill-yellow-400" />}
+                  {signal.is_verified && <Shield size={11} className="text-green-400" />}
+                  <span className="flex items-center gap-0.5 text-[10px] text-slate-600">
+                    <Clock size={10} />
+                    {formatDate(signal.source_date || signal.created_at)}
+                  </span>
+                  {signal.source_url && (
+                    <a href={signal.source_url} target="_blank" rel="noopener noreferrer" className="text-slate-600 hover:text-brand-400 transition-colors">
+                      <ExternalLink size={10} />
+                    </a>
+                  )}
+                </div>
+              </div>
+            ) : (
+              // NORMAL MODE: Original multi-line layout
+              <>
+                <div className="flex items-start gap-3 mb-2">
+                  <Link
+                    href={`/admin/intel/${signal.id}`}
+                    className="text-sm font-semibold text-slate-100 hover:text-brand-400 transition-colors leading-tight flex-1 min-w-0"
+                  >
+                    {signal.title}
+                  </Link>
+                  {signal.is_featured && (
+                    <Star size={14} className="text-yellow-400 flex-shrink-0 fill-yellow-400" />
+                  )}
+                  {signal.is_verified && (
+                    <Shield size={14} className="text-green-400 flex-shrink-0" />
+                  )}
+                </div>
 
-            {/* Summary */}
-            {signal.summary && (
-              <p className="text-xs text-slate-500 mb-3 line-clamp-2 leading-relaxed">
-                {signal.summary.slice(0, 200)}
-              </p>
+                {signal.summary && (
+                  <p className="text-xs text-slate-500 mb-3 line-clamp-2 leading-relaxed">
+                    {signal.summary.slice(0, 200)}
+                  </p>
+                )}
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${CATEGORY_COLORS[signal.signal_category] || 'bg-slate-500/15 text-slate-400'}`}>
+                    {signal.signal_category}
+                  </span>
+                  <span className={`px-2 py-0.5 rounded text-xs font-medium border ${SEVERITY_COLORS[signal.severity] || 'bg-slate-500/15 text-slate-400 border-slate-500/20'}`}>
+                    {signal.severity}
+                  </span>
+                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${STATUS_COLORS[status] || 'bg-slate-500/15 text-slate-400'}`}>
+                    {status}
+                  </span>
+                  {aiScore > 0 && (
+                    <AIScoreExplanation
+                      score={aiScore}
+                      signal={{
+                        signal_category: signal.signal_category,
+                        severity: signal.severity,
+                        source_url: signal.source_url ?? undefined,
+                        title: signal.title,
+                      }}
+                    />
+                  )}
+                  <span className="flex items-center gap-1 text-xs text-slate-600 ml-auto">
+                    <Clock size={12} />
+                    {formatDate(signal.source_date || signal.created_at)}
+                  </span>
+                  {signal.source_url && (
+                    <a href={signal.source_url} target="_blank" rel="noopener noreferrer" className="text-slate-600 hover:text-brand-400 transition-colors">
+                      <ExternalLink size={12} />
+                    </a>
+                  )}
+                </div>
+              </>
             )}
-
-            {/* Metadata row */}
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Category */}
-              <span
-                className={`px-2 py-0.5 rounded text-xs font-medium ${
-                  CATEGORY_COLORS[signal.signal_category] || 'bg-slate-500/15 text-slate-400'
-                }`}
-              >
-                {signal.signal_category}
-              </span>
-
-              {/* Severity */}
-              <span
-                className={`px-2 py-0.5 rounded text-xs font-medium border ${
-                  SEVERITY_COLORS[signal.severity] || 'bg-slate-500/15 text-slate-400 border-slate-500/20'
-                }`}
-              >
-                {signal.severity}
-              </span>
-
-              {/* Triage status */}
-              <span
-                className={`px-2 py-0.5 rounded text-xs font-medium ${
-                  STATUS_COLORS[status] || 'bg-slate-500/15 text-slate-400'
-                }`}
-              >
-                {status}
-              </span>
-
-              {/* AI Score with Explanation */}
-              {aiScore > 0 && (
-                <AIScoreExplanation
-                  score={aiScore}
-                  signal={{
-                    signal_category: signal.signal_category,
-                    severity: signal.severity,
-                    source_url: signal.source_url ?? undefined,
-                    title: signal.title,
-                  }}
-                />
-              )}
-
-              {/* Date */}
-              <span className="flex items-center gap-1 text-xs text-slate-600 ml-auto">
-                <Clock size={12} />
-                {formatDate(signal.source_date || signal.created_at)}
-              </span>
-
-              {/* Source link */}
-              {signal.source_url && (
-                <a
-                  href={signal.source_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-slate-600 hover:text-brand-400 transition-colors"
-                >
-                  <ExternalLink size={12} />
-                </a>
-              )}
-            </div>
           </div>
 
-          {/* Quick actions — always visible on mobile, hover-reveal on desktop */}
+          {/* Quick actions */}
           {(status === 'pending' || status === 'review') && (
             <div className="flex flex-col sm:flex-row items-center gap-1 flex-shrink-0">
               <button
                 onClick={() => handleAction('approve')}
                 disabled={acting}
-                className="p-2.5 sm:p-1.5 rounded-md text-green-500 hover:bg-green-500/10 active:bg-green-500/20 transition-all disabled:opacity-50 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center"
+                className={`${compact ? 'p-1' : 'p-2.5 sm:p-1.5'} rounded-md text-green-500 hover:bg-green-500/10 active:bg-green-500/20 transition-all disabled:opacity-50 ${compact ? 'min-w-0 min-h-0' : 'min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0'} flex items-center justify-center`}
                 title="Approve (A)"
               >
-                <CheckCircle size={20} className="sm:w-[18px] sm:h-[18px]" />
+                <CheckCircle size={compact ? 16 : 20} className={compact ? '' : 'sm:w-[18px] sm:h-[18px]'} />
               </button>
               <button
                 onClick={() => handleAction('reject')}
                 disabled={acting}
-                className="p-2.5 sm:p-1.5 rounded-md text-red-500 hover:bg-red-500/10 active:bg-red-500/20 transition-all disabled:opacity-50 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center"
+                className={`${compact ? 'p-1' : 'p-2.5 sm:p-1.5'} rounded-md text-red-500 hover:bg-red-500/10 active:bg-red-500/20 transition-all disabled:opacity-50 ${compact ? 'min-w-0 min-h-0' : 'min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0'} flex items-center justify-center`}
                 title="Reject (R)"
               >
-                <XCircle size={20} className="sm:w-[18px] sm:h-[18px]" />
+                <XCircle size={compact ? 16 : 20} className={compact ? '' : 'sm:w-[18px] sm:h-[18px]'} />
               </button>
             </div>
           )}

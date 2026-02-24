@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
+import { ChevronLeft, ChevronRight, RefreshCw, Maximize2, Minimize2 } from 'lucide-react'
 import { SignalCard } from './signal-card'
 import { SignalFilters } from './signal-filters'
 import { BulkActions } from './bulk-actions'
+import { QuickFilters } from '@/components/ui/quick-filters'
+import { SessionStats } from '@/components/ui/session-stats'
 import { toast } from 'sonner'
 import {
   Dialog,
@@ -15,6 +17,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import { useKeyboardShortcuts } from '@/lib/hooks/use-keyboard-shortcuts'
+import { useSessionStats } from '@/lib/hooks/use-session-stats'
 import { KeyboardHelp } from '@/components/ui/keyboard-help'
 
 interface TriageResult {
@@ -75,6 +78,10 @@ export function IntelQueue() {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [undoStack, setUndoStack] = useState<UndoAction[]>([])
   const [showHelp, setShowHelp] = useState(false)
+  
+  // Phase 2: Compact mode & session stats
+  const [compactMode, setCompactMode] = useState(false)
+  const { recordAction } = useSessionStats()
 
   const fetchSignals = useCallback(async () => {
     setLoading(true)
@@ -234,6 +241,9 @@ export function IntelQueue() {
           { id, previousStatus: 'pending', timestamp: Date.now() }
         ].slice(-10)) // Keep last 10
 
+        // Record action in session stats (Phase 2)
+        recordAction(action === 'approve' ? 'approve' : 'reject')
+
         // Show toast with undo option
         toast.success(`Signal ${action}d`, {
           action: {
@@ -318,8 +328,14 @@ export function IntelQueue() {
         </div>
       )}
 
+      {/* Phase 2: Session Performance Stats */}
+      <SessionStats />
+
       {/* Filters */}
       <SignalFilters stats={stats} />
+
+      {/* Phase 2: Quick Filter Chips */}
+      <QuickFilters stats={stats} />
 
       {/* Bulk actions */}
       <BulkActions
@@ -329,19 +345,29 @@ export function IntelQueue() {
         loading={bulkLoading}
       />
 
-      {/* Keyboard shortcut indicator */}
+      {/* Keyboard shortcut indicator & compact mode toggle */}
       {!loading && signals.length > 0 && (
         <div className="flex items-center justify-between px-4 py-2 bg-slate-800/40 border border-slate-800 rounded-lg">
           <span className="text-xs text-slate-400">
             Viewing signal {currentIndex + 1} of {signals.length}
           </span>
-          <button
-            onClick={() => setShowHelp(true)}
-            className="text-xs text-brand-400 hover:text-brand-300 transition-colors flex items-center gap-1"
-          >
-            <kbd className="px-1.5 py-0.5 text-xs bg-slate-700 border border-slate-600 rounded">?</kbd>
-            Keyboard shortcuts
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setCompactMode(!compactMode)}
+              className="text-xs text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1.5"
+              title={compactMode ? 'Switch to normal view' : 'Switch to compact view'}
+            >
+              {compactMode ? <Maximize2 size={14} /> : <Minimize2 size={14} />}
+              {compactMode ? 'Normal' : 'Compact'}
+            </button>
+            <button
+              onClick={() => setShowHelp(true)}
+              className="text-xs text-brand-400 hover:text-brand-300 transition-colors flex items-center gap-1"
+            >
+              <kbd className="px-1.5 py-0.5 text-xs bg-slate-700 border border-slate-600 rounded">?</kbd>
+              Keyboard shortcuts
+            </button>
+          </div>
         </div>
       )}
 
@@ -368,6 +394,7 @@ export function IntelQueue() {
               signal={signal}
               selected={selected.has(signal.id)}
               focused={index === currentIndex}
+              compact={compactMode}
               dataIndex={index}
               onSelect={handleSelect}
               onAction={handleAction}
