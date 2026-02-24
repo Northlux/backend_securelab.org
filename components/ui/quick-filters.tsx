@@ -24,7 +24,7 @@ interface QuickFiltersProps {
   stats?: {
     byCategory: Record<string, number>
     bySeverity: Record<string, number>
-  }
+  } | null
 }
 
 export function QuickFilters({ stats }: QuickFiltersProps) {
