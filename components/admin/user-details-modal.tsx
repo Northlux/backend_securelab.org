@@ -20,7 +20,9 @@ import {
   Clock,
   Monitor,
   Activity,
+  Users,
 } from 'lucide-react'
+import { GroupManagement } from './group-management'
 
 interface User {
   id: string
@@ -30,6 +32,7 @@ interface User {
   status: 'active' | 'inactive' | 'suspended' | 'pending_verification'
   created_at: string
   last_login_at: string | null
+  groups?: string[]
 }
 
 interface Session {
@@ -62,6 +65,7 @@ export function UserDetailsModal({ userId, open, onClose, onUpdate }: Props) {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
+  const [groupModalOpen, setGroupModalOpen] = useState(false)
 
   useEffect(() => {
     if (!open || !userId) return
@@ -261,6 +265,37 @@ export function UserDetailsModal({ userId, open, onClose, onUpdate }: Props) {
               </div>
             </div>
 
+            {/* Groups */}
+            <div className="bg-slate-800/40 border border-slate-800 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
+                  <Users size={14} />
+                  Groups ({user.groups?.length || 0})
+                </h3>
+                <button
+                  onClick={() => setGroupModalOpen(true)}
+                  className="text-xs text-brand-400 hover:text-brand-300 transition-colors font-medium"
+                >
+                  Manage Groups
+                </button>
+              </div>
+
+              {!user.groups || user.groups.length === 0 ? (
+                <p className="text-xs text-slate-500">No groups assigned</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {user.groups.map((group) => (
+                    <span
+                      key={group}
+                      className="inline-flex items-center px-2.5 py-1 bg-brand-500/15 text-brand-400 border border-brand-500/20 rounded-md text-xs font-medium"
+                    >
+                      {group}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Active Sessions */}
             <div className="bg-slate-800/40 border border-slate-800 rounded-lg p-4">
               <div className="flex items-center justify-between mb-3">
@@ -335,6 +370,28 @@ export function UserDetailsModal({ userId, open, onClose, onUpdate }: Props) {
           </div>
         ) : null}
       </DialogContent>
+
+      {/* Group Management Modal */}
+      {user && (
+        <GroupManagement
+          userId={user.id}
+          userEmail={user.email}
+          currentGroups={user.groups || []}
+          open={groupModalOpen}
+          onClose={() => setGroupModalOpen(false)}
+          onUpdate={() => {
+            // Refetch user data to get updated groups
+            fetch(`/api/v1/admin/users/${userId}`)
+              .then(res => res.json())
+              .then(json => {
+                if (!json.error) {
+                  setUser(json.user)
+                  onUpdate()
+                }
+              })
+          }}
+        />
+      )}
     </Dialog>
   )
 }

@@ -60,6 +60,7 @@ const menuItems: MenuItem[] = [
     icon: <Users size={18} />,
     subItems: [
       { label: 'All Users', href: '/admin/users' },
+      { label: 'Access Groups', href: '/admin/groups' },
       { label: 'Pending Verification', href: '/admin/users/pending' },
       { label: 'Suspended Users', href: '/admin/users/suspended' },
       { label: 'User Roles', href: '/admin/users/roles' },
